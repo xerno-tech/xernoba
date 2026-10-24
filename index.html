@@ -83,6 +83,8 @@
   .avatar.foto { background-size:cover !important; background-position:center !important; color:transparent; }
   .rabisco { position:absolute; inset:0; width:100%; height:100%; z-index:2; pointer-events:none; }
   .tela.desenhando .rabisco { pointer-events:auto; cursor:crosshair; }
+  .tela .ctrl { z-index:4; }   /* botões sempre por cima do desenho */
+  .tela.desenhando .ctrl { opacity:1; }
   .tela [data-a=lapis].ativo, .tela [data-a=clipe].ativo { background:var(--acc) !important; border-color:var(--acc) !important; }
   .falantes { position:absolute; top:10px; left:10px; z-index:2; display:flex; flex-wrap:wrap; gap:6px; max-width:60%; pointer-events:none; }
   .tela:has(.selo) .falantes { top:38px; }
@@ -90,7 +92,7 @@
   .falante .avatar { width:22px; height:22px; font-size:11px; box-shadow:0 0 0 2px var(--ok); }
   .falante .avatar.emoji { font-size:13px; }
   #faixaMini .falantes, body.limpo .falantes { display:none; }
-  .reacoes { position:absolute; top:10px; right:10px; display:flex; gap:4px; opacity:0; transition:opacity .2s; z-index:2; }
+  .reacoes { position:absolute; top:10px; right:10px; display:flex; gap:4px; opacity:0; transition:opacity .2s; z-index:4; }
   .tela:hover .reacoes { opacity:1; }
   .reacoes button { padding:4px 6px; font-size:17px; line-height:1; background:rgba(20,20,26,.8); border:1px solid rgba(255,255,255,.12); border-radius:8px; }
   .reacoes button:hover { transform:scale(1.15); background:rgba(40,40,50,.9); }
@@ -478,7 +480,7 @@
 <script>
 const $ = id => document.getElementById(id);
 // Versão desta página. Sobe a cada atualização; quem estiver com uma mais antiga recebe o aviso.
-const VERSAO = 5;
+const VERSAO = 6;
 async function conferirVersao() {
   try {
     const txt = await fetch(location.pathname + '?v=' + Date.now(), { cache: 'no-store' }).then(r => r.text());
@@ -1325,6 +1327,7 @@ function entrar(nome, sala) {
     t._riscos = [];   // { autor, cor, pts: [[x,y]...], ate }
     const b = t.querySelector('[data-a=lapis]');
     b.onclick = e => { e.stopPropagation(); const on = !t.classList.contains('desenhando'); t.classList.toggle('desenhando', on); b.classList.toggle('ativo', on); };
+    t._pararDesenho = () => { t.classList.remove('desenhando'); b.classList.remove('ativo'); };
     let desenhando = false, pend = [], novo = false, tm = null;
     const enviar = () => {
       if (!pend.length || !hubConn || !hubConn.open) { pend = []; return; }
@@ -1337,6 +1340,7 @@ function entrar(nome, sala) {
     cv.addEventListener('pointerup', fim); cv.addEventListener('pointercancel', fim);
     cv.addEventListener('click', e => e.stopPropagation());
   }
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') document.querySelectorAll('.tela.desenhando').forEach(t => t._pararDesenho && t._pararDesenho()); });
   function telaDe(dono) { return dono === euId ? telaLocal : (assistindo.get(dono) || {}).tela; }
   function receberRisco(d) {
     const t = telaDe(d.alvo); if (!t || !t._riscos) return;
