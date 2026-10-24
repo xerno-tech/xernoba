@@ -81,6 +81,15 @@
   body.semChat #areaLista { max-height:none; flex:1; }
   .avatar.emoji { font-size:17px; }
   .avatar.foto { background-size:cover !important; background-position:center !important; color:transparent; }
+  .rabisco { position:absolute; inset:0; width:100%; height:100%; z-index:2; pointer-events:none; }
+  .tela.desenhando .rabisco { pointer-events:auto; cursor:crosshair; }
+  .tela [data-a=lapis].ativo, .tela [data-a=clipe].ativo { background:var(--acc) !important; border-color:var(--acc) !important; }
+  .falantes { position:absolute; top:10px; left:10px; z-index:2; display:flex; flex-wrap:wrap; gap:6px; max-width:60%; pointer-events:none; }
+  .tela:has(.selo) .falantes { top:38px; }
+  .falante { display:flex; align-items:center; gap:6px; background:rgba(10,10,14,.75); border:1px solid rgba(62,207,142,.7); border-radius:999px; padding:3px 10px 3px 3px; font-size:12px; }
+  .falante .avatar { width:22px; height:22px; font-size:11px; box-shadow:0 0 0 2px var(--ok); }
+  .falante .avatar.emoji { font-size:13px; }
+  #faixaMini .falantes, body.limpo .falantes { display:none; }
   .reacoes { position:absolute; top:10px; right:10px; display:flex; gap:4px; opacity:0; transition:opacity .2s; z-index:2; }
   .tela:hover .reacoes { opacity:1; }
   .reacoes button { padding:4px 6px; font-size:17px; line-height:1; background:rgba(20,20,26,.8); border:1px solid rgba(255,255,255,.12); border-radius:8px; }
@@ -424,6 +433,7 @@
       </div>
       <label class="marcar"><input type="checkbox" id="ajChat"> Mostrar o chat</label>
       <label class="marcar"><input type="checkbox" id="ajMuteMini"> Mutar a transmissão quando eu minimizar</label>
+      <label class="marcar"><input type="checkbox" id="ajClipes"> Guardar os últimos 30 segundos de quem eu assisto (para o botão 🎬). Desligue se o PC ficar pesado.</label>
     </div>
 
     <div class="passo oculto" data-painel="admin">
@@ -456,7 +466,7 @@
 <script>
 const $ = id => document.getElementById(id);
 // Versão desta página. Sobe a cada atualização; quem estiver com uma mais antiga recebe o aviso.
-const VERSAO = 2;
+const VERSAO = 3;
 async function conferirVersao() {
   try {
     const txt = await fetch(location.pathname + '?v=' + Date.now(), { cache: 'no-store' }).then(r => r.text());
@@ -722,6 +732,12 @@ function entrar(nome, sala) {
             try { ca && ca.send({ tipo: 'parar' }); } catch (e) {}
           }
           difundir();
+        } else if (d.tipo === 'risco') {
+          const m = roster.get(c.peer); if (!m || !roster.has(d.alvo) || !Array.isArray(d.pts)) return;
+          const pts = d.pts.slice(0, 60).filter(p => Array.isArray(p) && p.length === 2 && p.every(n => typeof n === 'number' && n >= -0.1 && n <= 1.1));
+          if (!pts.length) return;
+          const msg = { tipo: 'risco', alvo: d.alvo, autor: c.peer, novo: !!d.novo, pts, cor: m.cor || corDe(m.nome) };
+          for (const x of conns.values()) if (x.open) try { x.send(msg); } catch (e) {}
         } else if (d.tipo === 'reacao') {
           const m = roster.get(c.peer); if (!m || !REACOES.includes(d.emoji) || !roster.has(d.alvo)) return;
           if (Date.now() - (ultimaReacao.get(c.peer) || 0) < 250) return;   // sem metralhadora
@@ -752,6 +768,7 @@ function entrar(nome, sala) {
       if (!d) return;
       if (d.tipo === 'lista') { membros = d.membros; if (d.regras) regrasSala = d.regras; renderLista(); atualizarAdminUI(); }
       else if (d.tipo === 'reacao') { mostrarReacao(d); }
+      else if (d.tipo === 'risco') { receberRisco(d); }
       else if (d.tipo === 'expulso') { bloquear('expulso'); }
       else if (d.tipo === 'semLogin') { bloqueado = true; salvar('token', ''); salvar('erroLogin', 'sessao'); location.href = location.pathname; }
       else if (d.tipo === 'pedeSenha') { bloquear('senha', d.errada); }
@@ -930,6 +947,19 @@ function entrar(nome, sala) {
   let emVoz = false, mudo = ler('mudo') === '1', mic = null, ctxVoz = null, micId = ler('micId');
   let semFiltro = ler('semFiltro') === '1';
   const vozes = new Map();   // id -> { call, audio, para }
+  const falandoDesde = new Map();   // quem falou há pouco (segura 0,6 s para não piscar)
+  let ultimoFalantes = '';
+  function atualizarFalantes() {
+    const ids = [...falandoDesde.keys()].filter(id => emVoz);
+    const chave = ids.join(',');
+    if (chave === ultimoFalantes) return;
+    ultimoFalantes = chave;
+    const html = ids.map(id => {
+      const m = membros.find(x => x.id === id) || { id, nome: id === euId ? nome : '?' };
+      return `<div class="falante">${avatarHTML(m)}<span>${esc(m.nome)}</span></div>`;
+    }).join('');
+    document.querySelectorAll('.tela .falantes').forEach(f => f.innerHTML = html);
+  }
   function medirFala(stream, id) {
     if (!ctxVoz) return () => {};
     const fonte = ctxVoz.createMediaStreamSource(stream);
@@ -939,7 +969,9 @@ function entrar(nome, sala) {
       an.getByteTimeDomainData(buf);
       let pico = 0; for (const x of buf) pico = Math.max(pico, Math.abs(x - 128));
       const fala = pico > 10 && !(id === euId && mudo);
-      document.querySelectorAll(`[data-av="${CSS.escape(id)}"]`).forEach(a => a.classList.toggle('falando', fala));
+      document.querySelectorAll(`#lista [data-av="${CSS.escape(id)}"]`).forEach(a => a.classList.toggle('falando', fala));
+      if (fala) falandoDesde.set(id, Date.now()); else if (falandoDesde.has(id) && Date.now() - falandoDesde.get(id) > 600) falandoDesde.delete(id);
+      atualizarFalantes();
     }, 150);
     return () => { clearInterval(tm); try { fonte.disconnect(); } catch (e) {} };
   }
@@ -966,6 +998,7 @@ function entrar(nome, sala) {
     if (v.audio) { v.audio.srcObject = null; }
     if (v.para) v.para();
     document.querySelectorAll(`[data-av="${CSS.escape(id)}"]`).forEach(a => a.classList.remove('falando'));
+    falandoDesde.delete(id); atualizarFalantes();
   }
   function sincronizarVoz() {
     if (!emVoz || !mic) return;
@@ -1122,11 +1155,19 @@ function entrar(nome, sala) {
       ${local ? '<span class="selo">VOCÊ · AO VIVO</span>' : ''}
       <div class="ctrl"><span class="n"></span>
         ${local ? '<span class="mut" style="font-size:12px">sem som pra você</span>' : '<button data-a="mute" title="Mutar esta transmissão">🔊</button><input type="range" min="0" max="2" step="0.05" value="1" title="Volume (até 200%)"><span class="pct">100%</span>'}
+        <button data-a="lapis" title="Rabiscar na tela">✏️</button>
+        ${local ? '' : '<button data-a="clipe" title="Salvar os últimos 30 segundos">🎬</button>'}
         <button data-a="mini" title="Minimizar">🗕</button>
         <button data-a="cheia" title="Tela cheia">⛶</button>${local ? '' : '<button data-a="fechar" title="Fechar">✕</button>'}
       </div>`;
     t.querySelector('.n').textContent = titulo;
     t._alvo = local ? null : id;
+    t._dono = local ? euId : id;   // de quem é a transmissão (para rabiscos)
+    prepararRabisco(t);
+    const fal = document.createElement('div'); fal.className = 'falantes'; t.appendChild(fal);
+    ultimoFalantes = '';   // força desenhar quem está falando nesta tela nova
+    const bClipe = t.querySelector('[data-a=clipe]');
+    if (bClipe) bClipe.onclick = e => { e.stopPropagation(); salvarClipe(t); };
     if (!local) {
       const bar = document.createElement('div'); bar.className = 'reacoes';
       for (const e of REACOES) {
@@ -1240,7 +1281,108 @@ function entrar(nome, sala) {
     try { it.call && it.call.close(); } catch (e) {}
     try { it.conn.close(); } catch (e) {}
     if (it.tela._fonte) try { it.tela._fonte.disconnect(); it.tela._ganho.disconnect(); } catch (e) {}
+    pararGravador(it.tela);
     it.tela.remove(); atualizarVazio(); renderLista();
+  }
+
+  /* =================== RABISCOS =================== */
+  // As coordenadas vão de 0 a 1 em relação à imagem do vídeo (sem as faixas pretas),
+  // para o desenho cair no mesmo lugar em telas de tamanhos diferentes.
+  function areaVideo(t) {
+    const v = t.querySelector('video'), r = t.getBoundingClientRect();
+    const vw = v.videoWidth || 16, vh = v.videoHeight || 9;
+    const esc_ = Math.min(r.width / vw, r.height / vh);
+    const w = vw * esc_, h = vh * esc_;
+    return { x: r.left + (r.width - w) / 2, y: r.top + (r.height - h) / 2, w, h, r };
+  }
+  function prepararRabisco(t) {
+    const cv = document.createElement('canvas'); cv.className = 'rabisco';
+    t.insertBefore(cv, t.querySelector('.aviso'));
+    t._riscos = [];   // { autor, cor, pts: [[x,y]...], ate }
+    const b = t.querySelector('[data-a=lapis]');
+    b.onclick = e => { e.stopPropagation(); const on = !t.classList.contains('desenhando'); t.classList.toggle('desenhando', on); b.classList.toggle('ativo', on); };
+    let desenhando = false, pend = [], novo = false, tm = null;
+    const enviar = () => {
+      if (!pend.length || !hubConn || !hubConn.open) { pend = []; return; }
+      hubConn.send({ tipo: 'risco', alvo: t._dono, pts: pend, novo }); pend = []; novo = false;
+    };
+    const ponto = e => { const a = areaVideo(t); return [+(((e.clientX - a.x) / a.w).toFixed(4)), +(((e.clientY - a.y) / a.h).toFixed(4))]; };
+    cv.addEventListener('pointerdown', e => { e.stopPropagation(); desenhando = true; novo = true; cv.setPointerCapture(e.pointerId); pend.push(ponto(e)); enviar(); tm = setInterval(enviar, 40); });
+    cv.addEventListener('pointermove', e => { if (desenhando) pend.push(ponto(e)); });
+    const fim = () => { if (!desenhando) return; desenhando = false; clearInterval(tm); enviar(); };
+    cv.addEventListener('pointerup', fim); cv.addEventListener('pointercancel', fim);
+    cv.addEventListener('click', e => e.stopPropagation());
+  }
+  function telaDe(dono) { return dono === euId ? telaLocal : (assistindo.get(dono) || {}).tela; }
+  function receberRisco(d) {
+    const t = telaDe(d.alvo); if (!t || !t._riscos) return;
+    let r = t._riscos.findLast ? t._riscos.findLast(x => x.autor === d.autor) : [...t._riscos].reverse().find(x => x.autor === d.autor);
+    if (d.novo || !r) { r = { autor: d.autor, cor: d.cor, pts: [] }; t._riscos.push(r); if (t._riscos.length > 80) t._riscos.shift(); }
+    r.pts.push(...d.pts); r.ate = Date.now() + 3500;
+    desenharRiscos();
+  }
+  let animando = false;
+  function desenharRiscos() {
+    if (animando) return; animando = true;
+    const passo = () => {
+      let algum = false;
+      document.querySelectorAll('.tela').forEach(t => {
+        const cv = t.querySelector('.rabisco'); if (!cv || !t._riscos) return;
+        const r = t.getBoundingClientRect(), dpr = devicePixelRatio || 1;
+        if (cv.width !== Math.round(r.width * dpr) || cv.height !== Math.round(r.height * dpr)) { cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr); }
+        const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, r.width, r.height);
+        const a = areaVideo(t), ox = a.x - a.r.left, oy = a.y - a.r.top, agora = Date.now();
+        t._riscos = t._riscos.filter(x => x.ate > agora);
+        for (const x of t._riscos) {
+          algum = true;
+          g.globalAlpha = Math.min(1, (x.ate - agora) / 1000);
+          g.strokeStyle = x.cor; g.lineWidth = Math.max(3, a.w / 260); g.lineCap = g.lineJoin = 'round';
+          g.shadowColor = 'rgba(0,0,0,.6)'; g.shadowBlur = 3;
+          g.beginPath();
+          x.pts.forEach(([px, py], i) => { const X = ox + px * a.w, Y = oy + py * a.h; i ? g.lineTo(X, Y) : g.moveTo(X, Y); });
+          if (x.pts.length === 1) g.lineTo(ox + x.pts[0][0] * a.w + 0.1, oy + x.pts[0][1] * a.h);
+          g.stroke();
+        }
+      });
+      if (algum) requestAnimationFrame(passo); else animando = false;
+    };
+    requestAnimationFrame(passo);
+  }
+
+  /* =================== CLIPES (últimos 30 s) =================== */
+  // Guarda o vídeo que chega em pedaços de 1 s e mantém só os últimos 30.
+  let clipesLigados = ler('clipes') !== '0';
+  function iniciarGravador(t, s) {
+    pararGravador(t);
+    if (!clipesLigados || typeof MediaRecorder === 'undefined') return;
+    const tipos = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+    const mime = tipos.find(x => MediaRecorder.isTypeSupported(x));
+    let rec;
+    try { rec = new MediaRecorder(s, { mimeType: mime, videoBitsPerSecond: 5000000, audioBitsPerSecond: 160000 }); } catch (e) { return; }
+    const g = { rec, mime, cabeca: null, pedacos: [], inicio: Date.now() };
+    rec.ondataavailable = ev => {
+      if (!ev.data || !ev.data.size) return;
+      if (!g.cabeca) { g.cabeca = ev.data; return; }   // o primeiro pedaço tem o cabeçalho do arquivo
+      g.pedacos.push(ev.data); if (g.pedacos.length > 30) g.pedacos.shift();
+    };
+    try { rec.start(1000); } catch (e) { return; }
+    t._grav = g;
+  }
+  function pararGravador(t) { if (t._grav) { try { t._grav.rec.stop(); } catch (e) {} t._grav = null; } }
+  function salvarClipe(t) {
+    const g = t._grav;
+    if (!clipesLigados) return toast('Os clipes estão desligados em ⚙️ Ajustes → Layout.', 'aviso');
+    if (!g || !g.cabeca) return toast('Ainda não deu tempo de guardar nada. Espere alguns segundos.', 'aviso');
+    const blob = new Blob([g.cabeca, ...g.pedacos], { type: g.mime.split(';')[0] });
+    const seg = Math.min(30, Math.round((Date.now() - g.inicio) / 1000));
+    const quando = new Date().toLocaleString('pt-BR').replace(/[/:]/g, '-').replace(/, /, '_');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `midori-${(t._chave || 'clipe').replace(/[^\w-]+/g, '_')}-${quando}.webm`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+    const b = t.querySelector('[data-a=clipe]'); b.classList.add('ativo'); setTimeout(() => b.classList.remove('ativo'), 600);
+    toast(`🎬 Clipe salvo (cerca de ${seg} s) na pasta de downloads.`);
   }
 
   /* =================== REAÇÕES =================== */
@@ -1383,6 +1525,7 @@ function entrar(nome, sala) {
     $('ajNotif').checked = notif && 'Notification' in window && Notification.permission === 'granted';
     $('ajChat').checked = mostrarChat;
     $('ajMuteMini').checked = muteMini;
+    $('ajClipes').checked = clipesLigados;
     atualizarAdminUI();
     aplicarLayout();
     $('ajustes').classList.remove('oculto');
@@ -1413,6 +1556,10 @@ function entrar(nome, sala) {
   };
   document.querySelectorAll('#ajLayout button').forEach(b => b.onclick = () => { layout = b.dataset.l; salvar('layout', layout); aplicarLayout(); });
   $('ajChat').onchange = () => { mostrarChat = $('ajChat').checked; salvar('chat', mostrarChat ? '1' : '0'); aplicarLayout(); };
+  $('ajClipes').onchange = () => {
+    clipesLigados = $('ajClipes').checked; salvar('clipes', clipesLigados ? '1' : '0');
+    for (const it of assistindo.values()) { const v = it.tela.querySelector('video'); if (clipesLigados && v.srcObject) iniciarGravador(it.tela, v.srcObject); else pararGravador(it.tela); }
+  };
   $('ajMuteMini').onchange = () => { muteMini = $('ajMuteMini').checked; salvar('muteMini', muteMini ? '1' : '0'); };
   aplicarLayout();
 
@@ -1737,6 +1884,7 @@ function entrar(nome, sala) {
     call.on('stream', s => {
       v.srcObject = s;
       ligarSom(it.tela, s);
+      iniciarGravador(it.tela, s);
       aviso.classList.add('oculto');
       const pedirClique = () => {
         aviso.textContent = '🔊 Clique para ouvir'; aviso.classList.add('clicavel'); aviso.classList.remove('oculto');
