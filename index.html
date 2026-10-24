@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Midori Xernoba</title>
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
-<link rel="stylesheet" href="css/midori.css?v=16">
+<link rel="stylesheet" href="css/midori.css?v=17">
 </head>
 <body>
 <button id="olho" title="Mostrar/ocultar interface"></button>
@@ -181,7 +181,7 @@
 <div id="ajustes" class="oculto">
   <div class="caixa">
     <div class="passo" style="padding-bottom:6px"><div class="topo"><h2>⚙️ Ajustes</h2><button class="link" id="fecharAjustes">✕</button></div></div>
-    <div class="abas"><button data-aba="perfil" class="sel">Perfil</button><button data-aba="sons">Sons e avisos</button><button data-aba="layout">Layout</button><button data-aba="admin">🛡️ Admin</button></div>
+    <div class="abas"><button data-aba="perfil" class="sel">Perfil</button><button data-aba="sons">Sons e avisos</button><button data-aba="layout">Layout</button><button data-aba="conexao">📶 Conexão</button><button data-aba="admin">🛡️ Admin</button></div>
 
     <div class="passo" data-painel="perfil">
       <div class="linhaPerfil"><div class="avatar" id="prevAvatar"></div><b id="prevNome"></b></div>
@@ -230,6 +230,12 @@
       <label class="marcar"><input type="checkbox" id="ajClipes"> Guardar os últimos 30 segundos de quem eu assisto (para o botão 🎬). Desligue se o PC ficar pesado.</label>
     </div>
 
+    <div class="passo oculto" data-painel="conexao">
+      <span class="mut" style="font-size:12px">Quedas e reconexões desde que você abriu a página. Se você estiver caindo, mande um print disto.</span>
+      <div id="registroConexao" class="registroConexao"></div>
+      <div class="rodape"><button class="sec" id="ajCopiarRegistro">📋 Copiar</button></div>
+    </div>
+
     <div class="passo oculto" data-painel="admin">
       <div id="admSemConfig" class="oculto" style="display:flex;flex-direction:column;gap:12px">
         <div class="nota">O admin ainda não foi configurado. Crie a senha de admin aqui: a página gera um <b>código</b> a partir dela. Mande só o código para o Claude colocar no site. A senha em si nunca vai para o GitHub.</div>
@@ -258,18 +264,18 @@
 </div>
 
 <!-- Versão desta página. Sobe a cada atualização; quem estiver com uma mais antiga recebe o aviso. -->
-<script>const VERSAO = 16;</script>
-<script src="js/config.js?v=16"></script>
-<script src="js/base.js?v=16"></script>
-<script src="js/entrada.js?v=16"></script>
-<script src="js/sala.js?v=16"></script>
-<script src="js/admin.js?v=16"></script>
-<script src="js/voz.js?v=16"></script>
-<script src="js/telas.js?v=16"></script>
-<script src="js/ajustes.js?v=16"></script>
-<script src="js/chat.js?v=16"></script>
-<script src="js/transmissao.js?v=16"></script>
-<script src="js/conexao.js?v=16"></script>
-<script src="js/inicio.js?v=16"></script>
+<script>const VERSAO = 17;</script>
+<script src="js/config.js?v=17"></script>
+<script src="js/base.js?v=17"></script>
+<script src="js/entrada.js?v=17"></script>
+<script src="js/sala.js?v=17"></script>
+<script src="js/admin.js?v=17"></script>
+<script src="js/voz.js?v=17"></script>
+<script src="js/telas.js?v=17"></script>
+<script src="js/ajustes.js?v=17"></script>
+<script src="js/chat.js?v=17"></script>
+<script src="js/transmissao.js?v=17"></script>
+<script src="js/conexao.js?v=17"></script>
+<script src="js/inicio.js?v=17"></script>
 </body>
 </html>

@@ -145,8 +145,8 @@ body.semChat #areaLista { max-height:none; flex:1; }
 .escudo { font-size:11px; margin-left:3px; }
 /* ajustes */
 #ajustes { position:fixed; inset:0; z-index:12; background:rgba(0,0,0,.7); display:flex; align-items:center; justify-content:center; padding:16px; }
-.abas { display:flex; gap:4px; border-bottom:1px solid var(--linha); padding:0 22px; }
-.abas button { background:none; border:0; border-bottom:2px solid transparent; border-radius:0; color:var(--mut); padding:10px 10px; font-size:14px; }
+.abas { display:flex; flex-wrap:wrap; gap:0 4px; border-bottom:1px solid var(--linha); padding:0 22px; }
+.abas button { background:none; border:0; border-bottom:2px solid transparent; border-radius:0; color:var(--mut); padding:10px 8px; font-size:14px; }
 .abas button:hover { background:none; color:var(--txt); }
 .abas button.sel { color:var(--txt); border-bottom-color:var(--acc); }
 .cores { display:flex; flex-wrap:wrap; gap:8px; }
@@ -337,3 +337,5 @@ body.naSala #olho { display:flex; }
   #grade { grid-template-columns:1fr; }
   .tela .ctrl { opacity:1; }
 }
+.registroConexao { background:var(--panel2); border:1px solid var(--linha); border-radius:9px; padding:8px 10px; max-height:260px; overflow:auto;
+  font-size:12.5px; display:flex; flex-direction:column; gap:4px; font-variant-numeric:tabular-nums; }

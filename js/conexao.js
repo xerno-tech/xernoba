@@ -62,12 +62,13 @@ function iniciarConexao() {
 
   peer.on('error', e => {
     if (e.type === 'peer-unavailable') {
-      if (String(e.message).includes(HUB)) agendarHub();
+      if (String(e.message).includes(HUB)) { if (hubConn && !hubConn.open) hubConn = null; agendarHub(); }
       else for (const id of [...assistindo.keys()]) if (String(e.message).includes(id)) pararDeAssistir(id);
     } else if (e.type === 'network' || e.type === 'server-error') {
       toast('Conexão com o servidor caiu. Tentando de novo…', 'aviso');
     }
+    if (e.type !== 'peer-unavailable') anotarConexao(`❗ Erro de conexão: ${e.type}`);
   });
-  peer.on('disconnected', () => setTimeout(() => { try { peer.reconnect(); } catch (e) {} }, 2000));
+  peer.on('disconnected', () => { anotarConexao('📡 Você caiu do servidor do PeerJS (as telas e a voz continuam); reconectando'); setTimeout(() => { try { peer.reconnect(); } catch (e) {} }, 2000); });
   window.addEventListener('beforeunload', () => { if (avisoDoHub) avisoDoHub(`${nome} saiu da sala`, null, null, 'saiu', euId); saindo = true; try { hubConn && hubConn.open && hubConn.send({ tipo: 'tchau' }); } catch (e) {} try { peer.destroy(); } catch (e) {} try { hubPeer && hubPeer.destroy(); } catch (e) {} });
 }

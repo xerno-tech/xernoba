@@ -5,6 +5,17 @@ let nome = '', sala = '', HUB = '';
 
 
 let peer = null, hubPeer = null, hubConn = null, euId = null, saindo = false, avisoDoHub = null;
+
+// registro de quedas (⚙️ Ajustes → 📶 Conexão): ajuda a descobrir por que alguém cai
+const registroConexao = [];
+function anotarConexao(texto) {
+  if (saindo) return;
+  registroConexao.push({ ts: Date.now(), texto: texto + (document.hidden ? ' (aba em segundo plano)' : '') });
+  if (registroConexao.length > 40) registroConexao.shift();
+  if (typeof mostrarRegistroConexao === 'function') mostrarRegistroConexao();
+}
+addEventListener('offline', () => anotarConexao('🔌 A sua internet caiu'));
+addEventListener('online', () => anotarConexao('🔌 A sua internet voltou'));
 let ausente = false, inicioLive = 0;
 const miniaturasRec = new Map();   // miniaturas recebidas de quem está ao vivo
 let previaDe = null;
@@ -43,6 +54,8 @@ function virarHub() {
   let senhaHash = regrasSala.senhaHash || null;
   // quem já pode estar na sala com senha (estava dentro quando a senha foi posta, ou acertou a senha)
   const autorizados = new Set(regrasSala.autorizados || []);
+  // quem já foi anunciado como admin (para não repetir o aviso a cada reconexão)
+  const adminsAvisados = new Set(regrasSala.adminsAvisados || []);
   // pulseiras de login já conferidas (token -> validade)
   const conferidas = new Map();
   // devolve os dados do Discord conferidos (id, avatar) ou null
@@ -86,12 +99,18 @@ function virarHub() {
   };
   const difundir = () => {
     const lista = [...roster.values()].map(({ cid: _c, _expulso, ...m }) => m);
-    const regras = { banidos: [...banidos], nomesBanidos, silenciados: [...silenciados], senhaHash, autorizados: [...autorizados] };
+    const regras = { banidos: [...banidos], nomesBanidos, silenciados: [...silenciados], senhaHash, autorizados: [...autorizados], adminsAvisados: [...adminsAvisados] };
     for (const c of conns.values()) if (c.open) try { c.send({ tipo: 'lista', membros: lista, regras }); } catch (e) {}
   };
-  hubPeer.on('open', () => { avisoDoHub = registrar; conectarHub(); });
+  let hubAbriu = false;
+  hubPeer.on('open', () => {
+    avisoDoHub = registrar;
+    anotarConexao(hubAbriu ? '🔁 O organizador (você) voltou ao servidor do PeerJS' : '🗂️ Você virou o organizador da sala');
+    hubAbriu = true;
+    conectarHub();
+  });
   // quem some sem avisar sai depois de 2,5 min sem sinal (o Chrome atrasa os sinais de abas em segundo plano)
-  setInterval(() => { const agora = Date.now(); for (const [id, t] of vistoEm) if (agora - t > 150000) { const c = conns.get(id); vistoEm.delete(id); if (c) try { c.close(); } catch (e) {} sairDe(id); } }, 5000);
+  setInterval(() => { const agora = Date.now(); for (const [id, t] of vistoEm) if (agora - t > 150000) { const c = conns.get(id); vistoEm.delete(id); const m = roster.get(id); if (m) anotarConexao(`⏱️ ${m.nome} ficou 2,5 min sem dar sinal e foi tirado da lista`); if (c) try { c.close(); } catch (e) {} sairDe(id); } }, 5000);
   hubPeer.on('connection', c => {
     conns.set(c.peer, c);
     c.on('data', async d => {
@@ -121,7 +140,9 @@ function virarHub() {
                     foto: d.usarFoto && disc && disc.id && disc.avatar ? `https://cdn.discordapp.com/avatars/${disc.id}/${disc.avatar}.png?size=64` : null,
                     cor: /^#[0-9a-f]{6}$/i.test(d.cor || '') ? d.cor : null, emoji: d.emoji ? String(d.emoji).slice(0, 8) : null };
         roster.set(c.peer, m);
-        if (admin && !(antes && antes.admin)) registrar(`${m.nome} agora é admin 🛡️`, null, null, 'nome', c.peer);
+        // avisa só uma vez por pessoa (não a cada reconexão ou troca de organizador)
+        if (admin && ccid && !adminsAvisados.has(ccid)) { adminsAvisados.add(ccid); registrar(`${m.nome} agora é admin 🛡️`, null, null, 'nome', c.peer); }
+        else if (!admin && ccid) adminsAvisados.delete(ccid);
         if (!antes) {
           try { c.send({ tipo: 'historico', msgs: historico }); } catch (e) {}
           for (const [tid, img] of miniaturas) if (roster.has(tid)) try { c.send({ tipo: 'thumb', id: tid, img }); } catch (e) {}
@@ -222,21 +243,42 @@ function virarHub() {
         registrar(texto, m.nome, c.peer, 'msg', c.peer, m.cor, img, Object.assign({}, resp ? { resp } : {}, tts ? { tts: true } : {}));
       }
     });
-    const sair = () => sairDe(c.peer);
+    // só tira da lista se esta ainda for a ligação atual da pessoa
+    // (uma ligação velha fechando depois da nova não pode apagar a nova)
+    const sair = () => { if (conns.get(c.peer) === c) sairDe(c.peer); };
     c.on('close', sair); c.on('error', sair);
   });
   hubPeer.on('error', e => { if (e.type === 'unavailable-id') { try { hubPeer.destroy(); } catch (x) {} hubPeer = null; conectarHub(); } });
-  hubPeer.on('disconnected', () => { try { hubPeer.reconnect(); } catch (e) {} });
+  hubPeer.on('disconnected', () => {
+    if (!hubPeer || hubPeer.destroyed) return;   // tentativa de virar organizador que não deu certo
+    if (hubAbriu) anotarConexao('📡 O organizador (você) caiu do servidor do PeerJS; reconectando');
+    try { hubPeer.reconnect(); } catch (e) {}
+  });
   setInterval(difundir, 5000);
 }
 let tHub;
 function conectarHub() {
   clearTimeout(tHub);
   if (bloqueado || saindo || !peer || peer.destroyed) return;
-  if (hubConn) try { hubConn.close(); } catch (e) {}
-  hubConn = peer.connect(HUB, { reliable: true });
-  hubConn.on('open', enviarEstado);
-  hubConn.on('data', d => {
+  if (hubConn && hubConn.open) return;   // já está ligado: não derruba uma ligação que funciona
+  if (hubConn && Date.now() - hubConn._desde < 8000) return;   // ainda está tentando ligar: espera
+  if (hubConn) { const velha = hubConn; hubConn = null; try { velha.close(); } catch (e) {} }
+  const conn = hubConn = peer.connect(HUB, { reliable: true });
+  conn._desde = Date.now();
+  // se ficar travada tentando ligar, desiste dela e tenta de novo
+  setTimeout(() => { if (hubConn === conn && !conn.open) { hubConn = null; try { conn.close(); } catch (e) {} agendarHub(); } }, 10000);
+  conn.on('open', () => {
+    const pc = conn.peerConnection;   // guarda o último estado da ligação, para o registro de quedas
+    if (pc) pc.addEventListener('iceconnectionstatechange', () => { conn._ice = pc.iceConnectionState; });
+    if (caiuDoHub) { caiuDoHub = false; anotarConexao('✅ Voltou a ligação com o organizador da sala'); } enviarEstado(); });
+  conn.on('close', () => {
+    if (hubConn !== conn) return;   // ligação velha, já trocada
+    const motivo = { disconnected: 'a rede oscilou', failed: 'a rede bloqueou ou caiu', closed: 'a ligação foi fechada' }[conn._ice];
+    anotarConexao('⚠️ Caiu a ligação com o organizador da sala' + (motivo ? ` (${motivo})` : ''));
+    caiuDoHub = true;
+    hubConn = null; if (!bloqueado) agendarHub();
+  });
+  conn.on('data', d => {
     if (!d) return;
     if (d.tipo === 'lista') { for (const m of d.membros) if (m.live) m._inicioLocal = Date.now() - (m.liveMs || 0); membros = d.membros; if (d.regras) regrasSala = d.regras; renderLista(); atualizarAdminUI(); atualizarEspectadores(); }
     else if (d.tipo === 'thumb') { miniaturasRec.set(d.id, d.img); if (previaDe === d.id) $('previaHover').querySelector('img').src = d.img; }
@@ -252,8 +294,8 @@ function conectarHub() {
     else if (d.tipo === 'msg') addMsg(d);
     else if (d.tipo === 'historico') (d.msgs || []).forEach(x => addMsg(x, true));
   });
-  hubConn.on('close', () => { hubConn = null; if (!bloqueado) agendarHub(); });
 }
+let caiuDoHub = false;
 function agendarHub() {
   clearTimeout(tHub);
   tHub = setTimeout(() => { if (bloqueado || saindo) return; if (!hubConn || !hubConn.open) virarHub(); if (hubPeer && hubPeer.open) conectarHub(); }, 500 + Math.random() * 2000);

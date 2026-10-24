@@ -203,3 +203,17 @@ if (largSalva) raiz.setProperty('--larguraLateral', largSalva + 'px');
   });
   alca.addEventListener('dblclick', () => { raiz.setProperty('--larguraLateral', '320px'); salvar('larguraLateral', ''); });
 })();
+
+// ---- 📶 Conexão: registro de quedas ----
+const horaSeg = ts => new Date(ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+function mostrarRegistroConexao() {
+  const el = $('registroConexao'); if (!el) return;
+  el.innerHTML = registroConexao.length
+    ? registroConexao.slice().reverse().map(x => `<div><span class="mut">${horaSeg(x.ts)}</span> ${esc(x.texto)}</div>`).join('')
+    : '<div class="mut">Nenhuma queda até agora. 👍</div>';
+}
+mostrarRegistroConexao();
+$('ajCopiarRegistro').onclick = () => {
+  const txt = `Midori v${VERSAO} · ${navigator.userAgent}\n` + registroConexao.map(x => `${horaSeg(x.ts)} ${x.texto}`).join('\n');
+  navigator.clipboard.writeText(txt).then(() => toast('Registro copiado.'), () => toast('Não deu para copiar.', 'erro'));
+};
