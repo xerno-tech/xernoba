@@ -74,6 +74,12 @@
   body.semChat #chat { display:none; }
   body.semChat #areaLista { max-height:none; flex:1; }
   .avatar.emoji { font-size:17px; }
+  #telaBloqueio { position:fixed; inset:0; z-index:30; background:rgba(0,0,0,.85); display:flex; align-items:center; justify-content:center; padding:16px; }
+  .admBtns { display:none; gap:3px; }
+  .membro:hover .admBtns { display:flex; }
+  .admBtns button { padding:4px 6px; font-size:12px; background:var(--panel3); border:1px solid var(--linha); }
+  .admBtns button.perigo { background:rgba(255,77,94,.15); border-color:rgba(255,77,94,.5); }
+  .escudo { font-size:11px; margin-left:3px; }
   /* ajustes */
   #ajustes { position:fixed; inset:0; z-index:12; background:rgba(0,0,0,.7); display:flex; align-items:center; justify-content:center; padding:16px; }
   .abas { display:flex; gap:4px; border-bottom:1px solid var(--linha); padding:0 22px; }
@@ -321,11 +327,24 @@
   </div>
 </div>
 
+<!-- ================= SENHA DA SALA / EXPULSO ================= -->
+<div id="telaBloqueio" class="oculto">
+  <div class="caixa"><div class="passo">
+    <div class="topo"><h2 id="bloqTitulo"></h2></div>
+    <p class="mut" id="bloqTexto" style="margin:0;font-size:14px"></p>
+    <div id="bloqSenhaBox" style="display:flex;flex-direction:column;gap:10px">
+      <input type="password" id="bloqSenha" placeholder="Senha da sala">
+      <div class="rodape"><button class="sec" id="bloqVoltar">Voltar</button><button id="bloqEntrar">Entrar</button></div>
+    </div>
+    <div class="rodape oculto" id="bloqSoVoltar"><button id="bloqVoltar2">Voltar ao início</button></div>
+  </div></div>
+</div>
+
 <!-- ================= AJUSTES ================= -->
 <div id="ajustes" class="oculto">
   <div class="caixa">
     <div class="passo" style="padding-bottom:6px"><div class="topo"><h2>⚙️ Ajustes</h2><button class="link" id="fecharAjustes">✕</button></div></div>
-    <div class="abas"><button data-aba="perfil" class="sel">Perfil</button><button data-aba="sons">Sons e avisos</button><button data-aba="layout">Layout</button></div>
+    <div class="abas"><button data-aba="perfil" class="sel">Perfil</button><button data-aba="sons">Sons e avisos</button><button data-aba="layout">Layout</button><button data-aba="admin">🛡️ Admin</button></div>
 
     <div class="passo" data-painel="perfil">
       <div class="linhaPerfil"><div class="avatar" id="prevAvatar"></div><b id="prevNome"></b></div>
@@ -353,6 +372,28 @@
       </div>
       <label class="marcar"><input type="checkbox" id="ajChat"> Mostrar o chat</label>
       <label class="marcar"><input type="checkbox" id="ajMuteMini"> Mutar a transmissão quando eu minimizar</label>
+    </div>
+
+    <div class="passo oculto" data-painel="admin">
+      <div id="admSemConfig" class="oculto" style="display:flex;flex-direction:column;gap:12px">
+        <div class="nota">O admin ainda não foi configurado. Crie a senha de admin aqui: a página gera um <b>código</b> a partir dela. Mande só o código para o Claude colocar no site. A senha em si nunca vai para o GitHub.</div>
+        <label class="campo">Nova senha de admin <input type="password" id="admNovaSenha" autocomplete="new-password"></label>
+        <label class="campo">Repita a senha <input type="password" id="admNovaSenha2" autocomplete="new-password"></label>
+        <div class="rodape"><button id="admGerar">Gerar código</button></div>
+        <label class="campo oculto" id="admCodigoBox">Código para mandar ao Claude <input type="text" id="admCodigo" readonly></label>
+      </div>
+      <div id="admLogin" class="oculto" style="display:flex;flex-direction:column;gap:12px">
+        <label class="campo">Senha de admin <input type="password" id="admSenha" autocomplete="current-password"></label>
+        <div class="rodape"><button id="admEntrar">Entrar como admin</button></div>
+      </div>
+      <div id="admPainel" class="oculto" style="display:flex;flex-direction:column;gap:14px">
+        <div class="nota">🛡️ Você é <b>admin</b> nesta sala. Passe o mouse em alguém na lista para <b>silenciar</b>, <b>parar a transmissão</b> ou <b>expulsar</b>.</div>
+        <div class="campo">Senha da sala <span class="mut" id="admStatusSenha" style="font-size:12px"></span>
+          <div style="display:flex;gap:8px"><input type="text" id="admSenhaSala" maxlength="40" placeholder="Nova senha"><button id="admDefinirSenha">Definir</button></div>
+          <span class="mut" style="font-size:12px">Quem já está na sala continua. Quem entrar depois precisa digitar a senha. Quando todo mundo sai, a sala e a senha somem.</span>
+        </div>
+        <div class="rodape"><button class="sec" id="admRemoverSenha">Remover senha da sala</button><button class="sec" id="admSair">Sair do modo admin</button></div>
+      </div>
     </div>
   </div>
 </div>
@@ -403,6 +444,19 @@ $('btnEntrar').onclick = () => {
 };
 for (const id of ['inNome', 'inSala']) $(id).addEventListener('keydown', e => { if (e.key === 'Enter') $('btnEntrar').click(); });
 
+/* =================== ADMIN (senha) =================== */
+// Código gerado a partir da senha de admin. A senha em si nunca fica no site.
+const ADMIN_HASH = '';
+const hex = buf => [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+const sha256 = async txt => hex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(txt)));
+async function chaveAdmin(senha) {
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(senha), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: new TextEncoder().encode('midori-xernoba-admin'), iterations: 150000 }, base, 256);
+  return hex(bits);
+}
+const hashSenhaSala = (sala, senha) => sha256('midori-sala:' + sala + ':' + senha);
+let cid = ler('cid'); if (!cid) { cid = Math.random().toString(36).slice(2) + Date.now().toString(36); salvar('cid', cid); }
+
 /* =================== SALA =================== */
 const perfil = { cor: ler('cor') || null, emoji: ler('emoji') || null };
 function entrar(nome, sala) {
@@ -413,6 +467,8 @@ function entrar(nome, sala) {
   const HUB = 'telinha-hub-' + sala;
 
   let peer = null, hubPeer = null, hubConn = null, euId = null, saindo = false, avisoDoHub = null;
+  let regrasSala = {}, senhaSala = null, bloqueado = false, silenciadoAdmin = false;
+  let adminKey = ler('adminKey') || null;
   let stream = null, aoVivo = false;
   let membros = [];
   const assistentes = new Map();   // quem me assiste: id -> {conn, call}
@@ -420,14 +476,20 @@ function entrar(nome, sala) {
 
   /* ---- Hub: organiza a lista da sala (o primeiro a entrar assume) ---- */
   function virarHub() {
-    if (hubPeer) return;
+    if (hubPeer || bloqueado || saindo) return;
     hubPeer = new Peer(HUB);
     const roster = new Map(), conns = new Map();
     const historico = [];
+    // regras da sala: herdadas do último hub, para não sumirem quando o hub muda
+    const banidos = new Set(regrasSala.banidos || []);
+    const silenciados = new Set(regrasSala.silenciados || []);
+    let senhaHash = regrasSala.senhaHash || null;
+    // quem já pode estar na sala com senha (estava dentro quando a senha foi posta, ou acertou a senha)
+    const autorizados = new Set(regrasSala.autorizados || []);
     function sairDe(id) {
       conns.delete(id); vistoEm.delete(id);
       const m = roster.get(id);
-      if (m) { roster.delete(id); registrar(`${m.nome} saiu da sala`, null, null, 'saiu', id); difundir(); }
+      if (m) { roster.delete(id); if (!m._expulso) registrar(`${m.nome} saiu da sala`, null, null, 'saiu', id); difundir(); }
     }
     const vistoEm = new Map();
     // evento: entrou/saiu/live/voz/nome/msg — usado para os sons; alvo: quem o evento envolve
@@ -439,23 +501,36 @@ function entrar(nome, sala) {
       for (const c of conns.values()) if (c.open) try { c.send(msg); } catch (e) {}
     };
     const difundir = () => {
-      const lista = [...roster.values()];
-      for (const c of conns.values()) if (c.open) try { c.send({ tipo: 'lista', membros: lista }); } catch (e) {}
+      const lista = [...roster.values()].map(({ cid: _c, _expulso, ...m }) => m);
+      const regras = { banidos: [...banidos], silenciados: [...silenciados], senhaHash, autorizados: [...autorizados] };
+      for (const c of conns.values()) if (c.open) try { c.send({ tipo: 'lista', membros: lista, regras }); } catch (e) {}
     };
     hubPeer.on('open', () => { avisoDoHub = registrar; conectarHub(); });
     // quem some sem avisar (aba fechada, internet caiu) sai depois de 15s sem sinal
     setInterval(() => { const agora = Date.now(); for (const [id, t] of vistoEm) if (agora - t > 15000) { const c = conns.get(id); vistoEm.delete(id); if (c) try { c.close(); } catch (e) {} sairDe(id); } }, 5000);
     hubPeer.on('connection', c => {
       conns.set(c.peer, c);
-      c.on('data', d => {
-        if (!d) return;
+      c.on('data', async d => {
+        if (!d || c._fora) return;   // conexão recusada: ignora o que vier depois
         vistoEm.set(c.peer, Date.now());
         if (d.tipo === 'tchau') { sairDe(c.peer); return; }
         if (d.tipo === 'estado') {
           const antes = roster.get(c.peer);
-          const m = { id: c.peer, nome: String(d.nome).slice(0, 24), live: !!d.live, voz: !!d.voz, mudo: !!d.mudo,
+          const ccid = String(d.cid || '').slice(0, 40);
+          if (!antes) {
+            // barra quem foi expulso ou não sabe a senha
+            if (ccid && banidos.has(ccid)) { c._fora = true; try { c.send({ tipo: 'expulso' }); } catch (e) {} setTimeout(() => c.close(), 300); return; }
+            if (senhaHash && !autorizados.has(ccid)) {
+              if (d.senha !== senhaHash) { c._fora = true; try { c.send({ tipo: 'pedeSenha', errada: !!d.senha }); } catch (e) {} setTimeout(() => c.close(), 300); return; }
+              autorizados.add(ccid);
+            }
+          }
+          const admin = !!(ADMIN_HASH && d.adminKey && await sha256(String(d.adminKey)) === ADMIN_HASH);
+          const m = { id: c.peer, cid: ccid, nome: String(d.nome).slice(0, 24), live: !!d.live, voz: !!d.voz, mudo: !!d.mudo || silenciados.has(ccid),
+                      silenciado: silenciados.has(ccid), admin,
                       cor: /^#[0-9a-f]{6}$/i.test(d.cor || '') ? d.cor : null, emoji: d.emoji ? String(d.emoji).slice(0, 8) : null };
           roster.set(c.peer, m);
+          if (admin && !(antes && antes.admin)) registrar(`${m.nome} agora é admin 🛡️`, null, null, 'nome', c.peer);
           if (!antes) {
             try { c.send({ tipo: 'historico', msgs: historico }); } catch (e) {}
             // quem só está se reconectando a um hub novo não é anunciado de novo
@@ -464,6 +539,35 @@ function entrar(nome, sala) {
             if (antes.nome !== m.nome) registrar(`${antes.nome} agora se chama ${m.nome}`, null, null, 'nome', c.peer);
             if (antes.live !== m.live) registrar(m.live ? `${m.nome} começou a transmitir` : `${m.nome} parou de transmitir`, null, null, m.live ? 'live' : 'fimLive', c.peer);
             if (antes.voz !== m.voz) registrar(m.voz ? `${m.nome} entrou na voz` : `${m.nome} saiu da voz`, null, null, 'voz', c.peer);
+          }
+          difundir();
+        } else if (d.tipo === 'acao') {
+          const adm = roster.get(c.peer);
+          if (!adm || !adm.admin) return;   // só admin manda
+          if (d.acao === 'senha') {
+            senhaHash = d.hash ? String(d.hash).slice(0, 64) : null;
+            autorizados.clear();
+            if (senhaHash) for (const m of roster.values()) if (m.cid) autorizados.add(m.cid);   // quem já está dentro continua
+            registrar(senhaHash ? `${adm.nome} colocou senha na sala 🔒` : `${adm.nome} tirou a senha da sala 🔓`, null, null, 'nome', c.peer);
+            difundir(); return;
+          }
+          const alvo = roster.get(d.alvo); if (!alvo || alvo.id === adm.id) return;
+          const ca = conns.get(alvo.id);
+          if (d.acao === 'expulsar') {
+            if (alvo.cid) { banidos.add(alvo.cid); autorizados.delete(alvo.cid); }
+            alvo._expulso = true;
+            registrar(`${adm.nome} removeu ${alvo.nome} da sala`, null, null, 'saiu', alvo.id);
+            try { ca && ca.send({ tipo: 'expulso' }); } catch (e) {}
+            setTimeout(() => { try { ca && ca.close(); } catch (e) {} sairDe(alvo.id); }, 400);
+          } else if (d.acao === 'silenciar' || d.acao === 'liberar') {
+            const sim = d.acao === 'silenciar';
+            if (alvo.cid) sim ? silenciados.add(alvo.cid) : silenciados.delete(alvo.cid);
+            alvo.silenciado = sim; if (sim) alvo.mudo = true;
+            registrar(sim ? `${adm.nome} silenciou ${alvo.nome} na voz` : `${adm.nome} liberou o microfone de ${alvo.nome}`, null, null, 'nome', alvo.id);
+            try { ca && ca.send({ tipo: 'silenciar', valor: sim }); } catch (e) {}
+          } else if (d.acao === 'parar') {
+            registrar(`${adm.nome} encerrou a transmissão de ${alvo.nome}`, null, null, 'nome', alvo.id);
+            try { ca && ca.send({ tipo: 'parar' }); } catch (e) {}
           }
           difundir();
         } else if (d.tipo === 'chat') {
@@ -482,25 +586,31 @@ function entrar(nome, sala) {
   let tHub;
   function conectarHub() {
     clearTimeout(tHub);
+    if (bloqueado || saindo || !peer || peer.destroyed) return;
     if (hubConn) try { hubConn.close(); } catch (e) {}
     hubConn = peer.connect(HUB, { reliable: true });
     hubConn.on('open', enviarEstado);
     hubConn.on('data', d => {
       if (!d) return;
-      if (d.tipo === 'lista') { membros = d.membros; renderLista(); }
+      if (d.tipo === 'lista') { membros = d.membros; if (d.regras) regrasSala = d.regras; renderLista(); atualizarAdminUI(); }
+      else if (d.tipo === 'expulso') { bloquear('expulso'); }
+      else if (d.tipo === 'pedeSenha') { bloquear('senha', d.errada); }
+      else if (d.tipo === 'silenciar') { aplicarSilencio(!!d.valor); }
+      else if (d.tipo === 'parar') { if (aoVivo) { pararTransmissao(); toast('Um admin encerrou a sua transmissão.', 'aviso', 8000); } }
       else if (d.tipo === 'msg') addMsg(d);
       else if (d.tipo === 'historico') (d.msgs || []).forEach(x => addMsg(x, true));
     });
-    hubConn.on('close', () => { hubConn = null; agendarHub(); });
+    hubConn.on('close', () => { hubConn = null; if (!bloqueado) agendarHub(); });
   }
   function agendarHub() {
     clearTimeout(tHub);
-    tHub = setTimeout(() => { if (!hubConn || !hubConn.open) virarHub(); if (hubPeer && hubPeer.open) conectarHub(); }, 500 + Math.random() * 2000);
+    tHub = setTimeout(() => { if (bloqueado || saindo) return; if (!hubConn || !hubConn.open) virarHub(); if (hubPeer && hubPeer.open) conectarHub(); }, 500 + Math.random() * 2000);
   }
   let jaEntrei = false;
   function enviarEstado() {
     if (!hubConn || !hubConn.open) return;
-    hubConn.send({ tipo: 'estado', nome, live: aoVivo, voz: emVoz, mudo: emVoz && mudo, cor: perfil.cor, emoji: perfil.emoji, voltando: jaEntrei });
+    hubConn.send({ tipo: 'estado', nome, live: aoVivo, voz: emVoz, mudo: emVoz && mudo, cor: perfil.cor, emoji: perfil.emoji, voltando: jaEntrei,
+                   cid, senha: senhaSala, adminKey });
     jaEntrei = true;
   }
   setInterval(enviarEstado, 5000);
@@ -517,7 +627,7 @@ function entrar(nome, sala) {
       div.className = 'membro';
       const status = m.live ? 'Ao vivo' : m.voz ? (m.mudo ? 'Na voz · mudo' : 'Na voz') : 'Assistindo';
       div.innerHTML = `${avatarHTML(m, m.live ? 'live' : '')}
-        <div class="info"><span class="n">${esc(m.nome)}${eu ? ' <span class="mut">(você)</span>' : ''}</span>
+        <div class="info"><span class="n">${esc(m.nome)}${m.admin ? '<span class="escudo" title="Admin">🛡️</span>' : ''}${eu ? ' <span class="mut">(você)</span>' : ''}</span>
         <span class="s ${m.live ? 'live' : ''}">${status}</span></div>
         ${m.voz ? `<span class="voz" title="${m.mudo ? 'Mudo' : 'Na voz'}">${m.mudo ? '🔇' : '🎙️'}</span>` : ''}`;
       if (m.voz && !eu && emVoz) {
@@ -526,6 +636,14 @@ function entrar(nome, sala) {
         r.value = ler('volVoz-' + m.nome) || '1';
         r.oninput = () => { salvar('volVoz-' + m.nome, r.value); const v = vozes.get(m.id); if (v && v.audio) v.audio.volume = Number(r.value); };
         div.appendChild(r);
+      }
+      if (souAdmin() && !eu) {
+        const box = document.createElement('div'); box.className = 'admBtns';
+        const btn = (txt, titulo, fn, cls) => { const b = document.createElement('button'); b.textContent = txt; b.title = titulo; if (cls) b.className = cls; b.onclick = e => { e.stopPropagation(); fn(); }; box.appendChild(b); };
+        if (m.voz) btn(m.silenciado ? '🎙️' : '🔇', m.silenciado ? 'Liberar o microfone' : 'Silenciar na voz', () => acaoAdmin(m.silenciado ? 'liberar' : 'silenciar', m.id));
+        if (m.live) btn('⏹', 'Parar a transmissão', () => acaoAdmin('parar', m.id));
+        btn('🚫', 'Expulsar da sala', () => { if (confirm(`Expulsar ${m.nome} da sala?`)) acaoAdmin('expulsar', m.id); }, 'perigo');
+        div.appendChild(box);
       }
       if (m.live && !eu) {
         const vendo = assistindo.has(m.id);
@@ -540,6 +658,82 @@ function entrar(nome, sala) {
     for (const id of [...assistindo.keys()]) if (!membros.some(m => m.id === id && m.live)) pararDeAssistir(id);
     sincronizarVoz();
   }
+
+  /* =================== ADMIN (cliente) =================== */
+  const souAdmin = () => !!membros.find(x => x.id === euId && x.admin);
+  function acaoAdmin(acao, alvo, extra) {
+    if (!hubConn || !hubConn.open) return toast('Ainda conectando à sala…', 'aviso');
+    hubConn.send(Object.assign({ tipo: 'acao', acao, alvo }, extra || {}));
+  }
+  function bloquear(motivo, errada) {
+    bloqueado = true;
+    try { hubConn && hubConn.close(); } catch (e) {}
+    $('telaBloqueio').classList.remove('oculto');
+    $('bloqSenhaBox').classList.toggle('oculto', motivo !== 'senha');
+    $('bloqSoVoltar').classList.toggle('oculto', motivo === 'senha');
+    if (motivo === 'senha') {
+      $('bloqTitulo').textContent = '🔒 Sala com senha';
+      $('bloqTexto').textContent = errada ? 'Senha errada. Tente de novo.' : 'Esta sala tem senha. Digite para entrar.';
+      $('bloqSenha').value = ''; setTimeout(() => $('bloqSenha').focus(), 50);
+    } else {
+      $('bloqTitulo').textContent = '🚫 Você foi removido da sala';
+      $('bloqTexto').textContent = 'Um admin tirou você desta sala.';
+      if (aoVivo) pararTransmissao();
+      if (emVoz) sairVoz();
+      for (const id of [...assistindo.keys()]) pararDeAssistir(id);
+      saindo = true;
+      try { peer.destroy(); } catch (e) {}
+      try { hubPeer && hubPeer.destroy(); } catch (e) {}
+    }
+  }
+  $('bloqEntrar').onclick = async () => {
+    const sen = $('bloqSenha').value; if (!sen) return;
+    senhaSala = await hashSenhaSala(sala, sen);
+    bloqueado = false; jaEntrei = false;
+    $('telaBloqueio').classList.add('oculto');
+    conectarHub();
+  };
+  $('bloqSenha').addEventListener('keydown', e => { if (e.key === 'Enter') $('bloqEntrar').click(); });
+  const voltarInicio = () => { location.href = location.pathname; };
+  $('bloqVoltar').onclick = voltarInicio; $('bloqVoltar2').onclick = voltarInicio;
+  function aplicarSilencio(sim) {
+    silenciadoAdmin = sim;
+    if (sim) { mudo = true; if (mic) mic.getAudioTracks().forEach(t => t.enabled = false); toast('🔇 Um admin silenciou o seu microfone.', 'aviso', 8000); }
+    else toast('🎙️ Um admin liberou o seu microfone. Desmute quando quiser.');
+    atualizarBotoesVoz(); enviarEstado(); renderLista();
+  }
+  function atualizarAdminUI() {
+    const adm = souAdmin();
+    $('admSemConfig').classList.toggle('oculto', !!ADMIN_HASH);
+    $('admLogin').classList.toggle('oculto', !ADMIN_HASH || adm);
+    $('admPainel').classList.toggle('oculto', !adm);
+    $('admStatusSenha').textContent = regrasSala.senhaHash ? '· 🔒 com senha agora' : '· 🔓 sem senha agora';
+  }
+  $('admGerar').onclick = async () => {
+    const a = $('admNovaSenha').value, b = $('admNovaSenha2').value;
+    if (a.length < 6) return toast('Use uma senha com pelo menos 6 caracteres.', 'aviso');
+    if (a !== b) return toast('As duas senhas não são iguais.', 'aviso');
+    $('admCodigo').value = await sha256(await chaveAdmin(a));
+    $('admCodigoBox').classList.remove('oculto');
+    $('admCodigo').select();
+  };
+  $('admEntrar').onclick = async () => {
+    const sen = $('admSenha').value; if (!sen) return;
+    const k = await chaveAdmin(sen);
+    if (await sha256(k) !== ADMIN_HASH) { toast('Senha de admin errada.', 'erro'); return; }
+    adminKey = k; salvar('adminKey', k); $('admSenha').value = '';
+    enviarEstado(); toast('🛡️ Agora você é admin.');
+  };
+  $('admSenha').addEventListener('keydown', e => { if (e.key === 'Enter') $('admEntrar').click(); });
+  $('admSair').onclick = () => { adminKey = null; salvar('adminKey', ''); enviarEstado(); toast('Você saiu do modo admin.'); };
+  $('admDefinirSenha').onclick = async () => {
+    const sen = $('admSenhaSala').value.trim(); if (!sen) return;
+    const h = await hashSenhaSala(sala, sen);
+    senhaSala = h;   // você também passa a "saber" a senha
+    acaoAdmin('senha', null, { hash: h }); $('admSenhaSala').value = '';
+    toast('🔒 Senha da sala definida. Passe para quem você quiser que entre.');
+  };
+  $('admRemoverSenha').onclick = () => acaoAdmin('senha', null, { hash: null });
 
   /* =================== VOZ =================== */
   // As vozes tocam nesta mesma página. Assim, ao transmitir a tela inteira,
@@ -723,6 +917,7 @@ function entrar(nome, sala) {
   $('btnVoz').onclick = entrarVoz;
   $('btnSairVoz').onclick = sairVoz;
   $('btnMic').onclick = () => {
+    if (silenciadoAdmin && mudo) { toast('🔇 Um admin silenciou você. Espere ele liberar.', 'aviso'); return; }
     mudo = !mudo; salvar('mudo', mudo ? '1' : '0');
     if (mic) mic.getAudioTracks().forEach(t => t.enabled = !mudo);
     atualizarBotoesVoz(); enviarEstado(); renderLista();
@@ -945,6 +1140,7 @@ function entrar(nome, sala) {
     $('ajNotif').checked = notif && 'Notification' in window && Notification.permission === 'granted';
     $('ajChat').checked = mostrarChat;
     $('ajMuteMini').checked = muteMini;
+    atualizarAdminUI();
     aplicarLayout();
     $('ajustes').classList.remove('oculto');
   };
