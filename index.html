@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Telinha</title>
+<title>Midori Xernoba</title>
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <style>
   :root {
     --bg:#0d0d11; --panel:#16161c; --panel2:#1f1f27; --panel3:#272731; --linha:#2b2b35;
-    --txt:#ececf1; --mut:#9494a3; --acc:#7c5cff; --acc2:#6a4cf0; --ok:#3ecf8e; --live:#ff4d5e; --aviso:#ffb347;
+    --txt:#ececf1; --mut:#9494a3; --acc:#2fbf71; --acc2:#27a862; --ok:#3ecf8e; --live:#ff4d5e; --aviso:#ffb347;
     --raio:12px;
   }
   * { box-sizing:border-box; }
@@ -57,6 +57,28 @@
   #btnSom.semSom { border-color:rgba(255,179,71,.6); color:#ffd08a; }
   body.limpo #faixaSom { display:none; }
   #corpo { flex:1; display:flex; min-height:0; }
+  /* layout destaque: uma tela grande e as outras numa faixa embaixo */
+  #grade.destaque { grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); grid-template-rows:minmax(0,1fr); grid-auto-rows:140px; }
+  #grade.destaque .tela.foco { grid-column:1 / -1; grid-row:1; }
+  #grade.destaque .tela:not(.foco) { cursor:pointer; }
+  body.semChat #chat { display:none; }
+  body.semChat #areaLista { max-height:none; flex:1; }
+  .avatar.emoji { font-size:17px; }
+  /* ajustes */
+  #ajustes { position:fixed; inset:0; z-index:12; background:rgba(0,0,0,.7); display:flex; align-items:center; justify-content:center; padding:16px; }
+  .abas { display:flex; gap:4px; border-bottom:1px solid var(--linha); padding:0 22px; }
+  .abas button { background:none; border:0; border-bottom:2px solid transparent; border-radius:0; color:var(--mut); padding:10px 10px; font-size:14px; }
+  .abas button:hover { background:none; color:var(--txt); }
+  .abas button.sel { color:var(--txt); border-bottom-color:var(--acc); }
+  .cores { display:flex; flex-wrap:wrap; gap:8px; }
+  .cores button { width:30px; height:30px; padding:0; border-radius:50%; border:2px solid transparent; }
+  .cores button.sel { border-color:#fff; }
+  .linhaPerfil { display:flex; align-items:center; gap:12px; }
+  .linhaPerfil .avatar { width:46px; height:46px; font-size:20px; }
+  .linhaPerfil .avatar.emoji { font-size:26px; }
+  .emojis { display:flex; flex-wrap:wrap; gap:4px; }
+  .emojis button { background:var(--panel2); border:1px solid var(--linha); padding:4px 7px; font-size:18px; border-radius:8px; }
+  .emojis button.sel { border-color:var(--acc); }
   #membros { width:270px; flex-shrink:0; background:var(--panel); border-right:1px solid var(--linha); display:flex; flex-direction:column; min-height:0; }
   #areaLista { padding:12px 10px; overflow:auto; max-height:45%; flex-shrink:0; }
   #chat { flex:1; display:flex; flex-direction:column; min-height:0; border-top:1px solid var(--linha); }
@@ -171,7 +193,7 @@
 
 <!-- ================= ENTRADA ================= -->
 <div id="entrada">
-  <h1>📺 Telinha</h1>
+  <h1>🍃 Midori Xernoba</h1>
   <p>Transmita seu jogo para os amigos, direto do navegador.</p>
   <label class="campo">Seu nome <input type="text" id="inNome" maxlength="24" placeholder="Ex.: Xernoba" autocomplete="nickname"></label>
   <label class="campo">Sala <input type="text" id="inSala" maxlength="32" placeholder="Ex.: galera-x7k2"></label>
@@ -181,8 +203,9 @@
 <!-- ================= SALA ================= -->
 <div id="sala" class="oculto">
   <div id="barra">
-    <span class="marca">📺 Telinha</span>
+    <span class="marca">🍃 Midori Xernoba</span>
     <span class="salaNome"><span id="txtSala"></span><button class="link" id="btnLink" title="Copiar link da sala">🔗 Copiar link</button></span>
+    <button class="link" id="btnAjustes" title="Ajustes">⚙️ Ajustes</button>
     <span class="esp"></span>
     <div id="aoVivoBox" class="oculto">
       <span class="pilula" id="pilula">AO VIVO</span>
@@ -285,6 +308,41 @@
   </div>
 </div>
 
+<!-- ================= AJUSTES ================= -->
+<div id="ajustes" class="oculto">
+  <div class="caixa">
+    <div class="passo" style="padding-bottom:6px"><div class="topo"><h2>⚙️ Ajustes</h2><button class="link" id="fecharAjustes">✕</button></div></div>
+    <div class="abas"><button data-aba="perfil" class="sel">Perfil</button><button data-aba="sons">Sons e avisos</button><button data-aba="layout">Layout</button></div>
+
+    <div class="passo" data-painel="perfil">
+      <div class="linhaPerfil"><div class="avatar" id="prevAvatar"></div><b id="prevNome"></b></div>
+      <label class="campo">Nome
+        <div class="linha" style="display:flex;gap:8px"><input type="text" id="ajNome" maxlength="24"><button id="ajSalvarNome">Salvar</button></div>
+      </label>
+      <div class="campo">Cor do avatar <div class="cores" id="ajCores"></div></div>
+      <div class="campo">Emoji no lugar da inicial <div class="emojis" id="ajEmojis"></div></div>
+    </div>
+
+    <div class="passo oculto" data-painel="sons">
+      <label class="marcar"><input type="checkbox" data-som="sala"> Alguém entrou ou saiu da sala</label>
+      <label class="marcar"><input type="checkbox" data-som="msg"> Nova mensagem no chat</label>
+      <label class="marcar"><input type="checkbox" data-som="live"> Alguém começou a transmitir</label>
+      <label class="marcar"><input type="checkbox" data-som="voz"> Alguém entrou ou saiu da voz</label>
+      <label class="campo">Volume dos sons <input type="range" id="ajVolSom" min="0" max="1" step="0.05" style="accent-color:var(--acc)"></label>
+      <label class="marcar"><input type="checkbox" id="ajNotif"> Avisar no Windows quando a aba estiver em segundo plano (mensagens e transmissões)</label>
+      <div class="rodape"><button class="sec" id="ajTestarSom">🔔 Testar som</button></div>
+    </div>
+
+    <div class="passo oculto" data-painel="layout">
+      <div class="campo">Telas
+        <div class="segmentado" id="ajLayout"><button data-l="grade">▦ Grade</button><button data-l="destaque">▣ Destaque</button></div>
+        <span class="mut" style="font-size:12px">No Destaque, uma tela fica grande e as outras pequenas embaixo. Clique numa pequena para trocar.</span>
+      </div>
+      <label class="marcar"><input type="checkbox" id="ajChat"> Mostrar o chat</label>
+    </div>
+  </div>
+</div>
+
 <script>
 const $ = id => document.getElementById(id);
 const salvar = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
@@ -332,11 +390,12 @@ $('btnEntrar').onclick = () => {
 for (const id of ['inNome', 'inSala']) $(id).addEventListener('keydown', e => { if (e.key === 'Enter') $('btnEntrar').click(); });
 
 /* =================== SALA =================== */
+const perfil = { cor: ler('cor') || null, emoji: ler('emoji') || null };
 function entrar(nome, sala) {
   $('entrada').classList.add('oculto'); $('sala').classList.remove('oculto');
   document.body.classList.add('naSala');
   $('txtSala').textContent = '# ' + sala;
-  document.title = 'Telinha · ' + sala;
+  document.title = 'Midori Xernoba · ' + sala;
   const HUB = 'telinha-hub-' + sala;
 
   let peer = null, hubPeer = null, hubConn = null, euId = null, saindo = false, avisoDoHub = null;
@@ -354,12 +413,14 @@ function entrar(nome, sala) {
     function sairDe(id) {
       conns.delete(id); vistoEm.delete(id);
       const m = roster.get(id);
-      if (m) { roster.delete(id); registrar(`${m.nome} saiu da sala`); difundir(); }
+      if (m) { roster.delete(id); registrar(`${m.nome} saiu da sala`, null, null, 'saiu', id); difundir(); }
     }
     const vistoEm = new Map();
-    const registrar = (texto, nomeAutor, idAutor) => {
+    // evento: entrou/saiu/live/voz/nome/msg — usado para os sons; alvo: quem o evento envolve
+    const registrar = (texto, nomeAutor, idAutor, evento, alvo, cor) => {
       if (saindo) return;   // a página está fechando: as conexões caindo não são saídas de verdade
-      const msg = { tipo: 'msg', uid: Math.random().toString(36).slice(2) + Date.now().toString(36), ts: Date.now(), texto, nome: nomeAutor || null, id: idAutor || null };
+      const msg = { tipo: 'msg', uid: Math.random().toString(36).slice(2) + Date.now().toString(36), ts: Date.now(), texto,
+                    nome: nomeAutor || null, id: idAutor || null, evento: evento || (nomeAutor ? 'msg' : null), alvo: alvo || idAutor || null, cor: cor || null };
       historico.push(msg); if (historico.length > 60) historico.shift();
       for (const c of conns.values()) if (c.open) try { c.send(msg); } catch (e) {}
     };
@@ -378,21 +439,23 @@ function entrar(nome, sala) {
         if (d.tipo === 'tchau') { sairDe(c.peer); return; }
         if (d.tipo === 'estado') {
           const antes = roster.get(c.peer);
-          const m = { id: c.peer, nome: String(d.nome).slice(0, 24), live: !!d.live, voz: !!d.voz, mudo: !!d.mudo };
+          const m = { id: c.peer, nome: String(d.nome).slice(0, 24), live: !!d.live, voz: !!d.voz, mudo: !!d.mudo,
+                      cor: /^#[0-9a-f]{6}$/i.test(d.cor || '') ? d.cor : null, emoji: d.emoji ? String(d.emoji).slice(0, 8) : null };
           roster.set(c.peer, m);
           if (!antes) {
             try { c.send({ tipo: 'historico', msgs: historico }); } catch (e) {}
             // quem só está se reconectando a um hub novo não é anunciado de novo
-            if (!d.voltando) registrar(`${m.nome} entrou na sala`);
+            if (!d.voltando) registrar(`${m.nome} entrou na sala`, null, null, 'entrou', c.peer);
           } else {
-            if (antes.live !== m.live) registrar(m.live ? `${m.nome} começou a transmitir` : `${m.nome} parou de transmitir`);
-            if (antes.voz !== m.voz) registrar(m.voz ? `${m.nome} entrou na voz` : `${m.nome} saiu da voz`);
+            if (antes.nome !== m.nome) registrar(`${antes.nome} agora se chama ${m.nome}`, null, null, 'nome', c.peer);
+            if (antes.live !== m.live) registrar(m.live ? `${m.nome} começou a transmitir` : `${m.nome} parou de transmitir`, null, null, m.live ? 'live' : 'fimLive', c.peer);
+            if (antes.voz !== m.voz) registrar(m.voz ? `${m.nome} entrou na voz` : `${m.nome} saiu da voz`, null, null, 'voz', c.peer);
           }
           difundir();
         } else if (d.tipo === 'chat') {
           const m = roster.get(c.peer); if (!m) return;
           const texto = String(d.texto || '').trim().slice(0, 300); if (!texto) return;
-          registrar(texto, m.nome, c.peer);
+          registrar(texto, m.nome, c.peer, 'msg', c.peer, m.cor);
         }
       });
       const sair = () => sairDe(c.peer);
@@ -412,7 +475,7 @@ function entrar(nome, sala) {
       if (!d) return;
       if (d.tipo === 'lista') { membros = d.membros; renderLista(); }
       else if (d.tipo === 'msg') addMsg(d);
-      else if (d.tipo === 'historico') (d.msgs || []).forEach(addMsg);
+      else if (d.tipo === 'historico') (d.msgs || []).forEach(x => addMsg(x, true));
     });
     hubConn.on('close', () => { hubConn = null; agendarHub(); });
   }
@@ -423,7 +486,7 @@ function entrar(nome, sala) {
   let jaEntrei = false;
   function enviarEstado() {
     if (!hubConn || !hubConn.open) return;
-    hubConn.send({ tipo: 'estado', nome, live: aoVivo, voz: emVoz, mudo: emVoz && mudo, voltando: jaEntrei });
+    hubConn.send({ tipo: 'estado', nome, live: aoVivo, voz: emVoz, mudo: emVoz && mudo, cor: perfil.cor, emoji: perfil.emoji, voltando: jaEntrei });
     jaEntrei = true;
   }
   setInterval(enviarEstado, 5000);
@@ -439,7 +502,7 @@ function entrar(nome, sala) {
       const div = document.createElement('div');
       div.className = 'membro';
       const status = m.live ? 'Ao vivo' : m.voz ? (m.mudo ? 'Na voz · mudo' : 'Na voz') : 'Assistindo';
-      div.innerHTML = `<div class="avatar ${m.live ? 'live' : ''}" data-av="${esc(m.id)}" style="background:${corDe(m.nome)}">${esc(m.nome.charAt(0).toUpperCase())}</div>
+      div.innerHTML = `${avatarHTML(m, m.live ? 'live' : '')}
         <div class="info"><span class="n">${esc(m.nome)}${eu ? ' <span class="mut">(você)</span>' : ''}</span>
         <span class="s ${m.live ? 'live' : ''}">${status}</span></div>
         ${m.voz ? `<span class="voz" title="${m.mudo ? 'Mudo' : 'Na voz'}">${m.mudo ? '🔇' : '🎙️'}</span>` : ''}`;
@@ -670,11 +733,21 @@ function entrar(nome, sala) {
     t.querySelector('[data-a=cheia]').onclick = () => document.fullscreenElement ? document.exitFullscreen() : t.requestFullscreen();
     const f = t.querySelector('[data-a=fechar]'); if (f) f.onclick = () => pararDeAssistir(id);
     v.ondblclick = () => t.querySelector('[data-a=cheia]').click();
+    v.onclick = () => { if (layout === 'destaque') focar(t); };
     if (local) $('grade').prepend(t); else $('grade').appendChild(t);
-    atualizarVazio();
+    atualizarVazio(); atualizarFoco();
     return t;
   }
-  function atualizarVazio() { $('vazio').classList.toggle('oculto', $('grade').querySelectorAll('.tela').length > 0); }
+  function atualizarVazio() { $('vazio').classList.toggle('oculto', $('grade').querySelectorAll('.tela').length > 0); atualizarFoco(); }
+  function focar(t) { $('grade').querySelectorAll('.tela').forEach(x => x.classList.toggle('foco', x === t)); }
+  function atualizarFoco() {
+    const telas = [...$('grade').querySelectorAll('.tela')];
+    if (layout !== 'destaque') { telas.forEach(x => x.classList.remove('foco')); return; }
+    if (telas.some(x => x.classList.contains('foco'))) return;
+    // prefere a tela de um amigo; se não tiver, a sua
+    const alvo = telas.find(x => !x.querySelector('.selo')) || telas[0];
+    if (alvo) focar(alvo);
+  }
 
   function assistir(m) {
     if (assistindo.has(m.id)) return;
@@ -693,19 +766,148 @@ function entrar(nome, sala) {
     it.tela.remove(); atualizarVazio(); renderLista();
   }
 
+  /* =================== PERFIL, SONS E LAYOUT =================== */
+  const CORES = ['#2fbf71', '#16a3a3', '#3b82f6', '#8b5cf6', '#ec4899', '#ef4444', '#f59e0b', '#64748b'];
+  const EMOJIS = ['🍃', '🎮', '🐸', '🐱', '🦊', '🐼', '👾', '🔥', '⚡', '🌙', '🍕', '👑'];
+  function clarear(hex) {
+    const n = parseInt(hex.slice(1), 16), c = v => Math.min(255, Math.round(v + (255 - v) * .35));
+    return `rgb(${c(n >> 16)}, ${c((n >> 8) & 255)}, ${c(n & 255)})`;
+  }
+  function avatarHTML(m, extra = '') {
+    const cor = m.cor || corDe(m.nome);
+    const dentro = m.emoji ? esc(m.emoji) : esc((m.nome || '?').charAt(0).toUpperCase());
+    return `<div class="avatar ${extra} ${m.emoji ? 'emoji' : ''}" data-av="${esc(m.id || '')}" style="background:${cor}">${dentro}</div>`;
+  }
+
+  // ---- sons (gerados na hora, sem arquivos) ----
+  const sons = Object.assign({ sala: true, msg: true, live: true, voz: true }, JSON.parse(ler('sons') || '{}'));
+  let volSom = Number(ler('volSom') || '0.5');
+  let notif = ler('notif') === '1';
+  let ctxSom = null;
+  const NOTAS = { entrou: [660, 880], saiu: [660, 440], msg: [988], live: [523, 659, 784], voz: [740, 988], teste: [523, 784] };
+  function tocar(tipo) {
+    if (volSom <= 0) return;
+    try {
+      ctxSom = ctxSom || new AudioContext();
+      ctxSom.resume().catch(() => {});
+      const t0 = ctxSom.currentTime;
+      (NOTAS[tipo] || NOTAS.msg).forEach((f, i) => {
+        const o = ctxSom.createOscillator(), g = ctxSom.createGain();
+        o.type = 'sine'; o.frequency.value = f;
+        const ini = t0 + i * 0.09;
+        g.gain.setValueAtTime(0, ini);
+        g.gain.linearRampToValueAtTime(0.18 * volSom, ini + 0.01);
+        g.gain.exponentialRampToValueAtTime(0.0001, ini + 0.22);
+        o.connect(g).connect(ctxSom.destination);
+        o.start(ini); o.stop(ini + 0.25);
+      });
+    } catch (e) {}
+  }
+  const GRUPO = { entrou: 'sala', saiu: 'sala', msg: 'msg', live: 'live', voz: 'voz' };
+  function avisarEvento(m) {
+    const grupo = GRUPO[m.evento];
+    if (!grupo || m.alvo === euId) return;   // não toca para as suas próprias ações
+    if (sons[grupo]) tocar(m.evento);
+    if (notif && document.hidden && (grupo === 'msg' || grupo === 'live') && 'Notification' in window && Notification.permission === 'granted') {
+      try {
+        const n = new Notification(grupo === 'msg' ? m.nome : 'Midori Xernoba', { body: m.texto, tag: 'midori-' + grupo, silent: true });
+        n.onclick = () => { window.focus(); n.close(); };
+      } catch (e) {}
+    }
+  }
+
+  // ---- layout ----
+  let layout = ler('layout') || 'grade';
+  let mostrarChat = ler('chat') !== '0';
+  function aplicarLayout() {
+    $('grade').classList.toggle('destaque', layout === 'destaque');
+    document.body.classList.toggle('semChat', !mostrarChat);
+    document.querySelectorAll('#ajLayout button').forEach(b => b.classList.toggle('sel', b.dataset.l === layout));
+    atualizarFoco();
+  }
+
+  // ---- janela de ajustes ----
+  function abrirAba(aba) {
+    document.querySelectorAll('.abas button').forEach(b => b.classList.toggle('sel', b.dataset.aba === aba));
+    document.querySelectorAll('[data-painel]').forEach(p => p.classList.toggle('oculto', p.dataset.painel !== aba));
+  }
+  function desenharPerfil() {
+    const eu = { id: '', nome, cor: perfil.cor, emoji: perfil.emoji };
+    const prev = $('prevAvatar');
+    prev.outerHTML = avatarHTML(eu).replace('<div class="avatar', '<div id="prevAvatar" class="avatar');
+    $('prevNome').textContent = nome;
+    const atualCor = perfil.cor || corDe(nome);
+    $('ajCores').innerHTML = '';
+    for (const c of CORES) {
+      const b = document.createElement('button'); b.style.background = c; b.title = c;
+      if (c === atualCor) b.className = 'sel';
+      b.onclick = () => { perfil.cor = c; salvar('cor', c); desenharPerfil(); enviarEstado(); };
+      $('ajCores').appendChild(b);
+    }
+    $('ajEmojis').innerHTML = '';
+    const semEmoji = document.createElement('button'); semEmoji.textContent = 'Aa'; semEmoji.title = 'Usar a inicial';
+    if (!perfil.emoji) semEmoji.className = 'sel';
+    semEmoji.onclick = () => { perfil.emoji = null; salvar('emoji', ''); desenharPerfil(); enviarEstado(); };
+    $('ajEmojis').appendChild(semEmoji);
+    for (const e of EMOJIS) {
+      const b = document.createElement('button'); b.textContent = e;
+      if (e === perfil.emoji) b.className = 'sel';
+      b.onclick = () => { perfil.emoji = e; salvar('emoji', e); desenharPerfil(); enviarEstado(); };
+      $('ajEmojis').appendChild(b);
+    }
+  }
+  $('btnAjustes').onclick = () => {
+    $('ajNome').value = nome;
+    desenharPerfil();
+    document.querySelectorAll('[data-som]').forEach(c => c.checked = !!sons[c.dataset.som]);
+    $('ajVolSom').value = volSom;
+    $('ajNotif').checked = notif && 'Notification' in window && Notification.permission === 'granted';
+    $('ajChat').checked = mostrarChat;
+    aplicarLayout();
+    $('ajustes').classList.remove('oculto');
+  };
+  $('fecharAjustes').onclick = () => $('ajustes').classList.add('oculto');
+  $('ajustes').onclick = e => { if (e.target === $('ajustes')) $('ajustes').classList.add('oculto'); };
+  document.querySelectorAll('.abas button').forEach(b => b.onclick = () => abrirAba(b.dataset.aba));
+  $('ajSalvarNome').onclick = () => {
+    const novo = $('ajNome').value.trim().slice(0, 24);
+    if (!novo || novo === nome) return;
+    nome = novo; salvar('nome', nome);
+    if (telaLocal) telaLocal.querySelector('.n').textContent = nome;
+    desenharPerfil(); enviarEstado();
+    toast('Nome trocado para <b>' + esc(nome) + '</b>.');
+  };
+  $('ajNome').addEventListener('keydown', e => { if (e.key === 'Enter') $('ajSalvarNome').click(); });
+  document.querySelectorAll('[data-som]').forEach(c => c.onchange = () => { sons[c.dataset.som] = c.checked; salvar('sons', JSON.stringify(sons)); });
+  $('ajVolSom').oninput = () => { volSom = Number($('ajVolSom').value); salvar('volSom', volSom); };
+  $('ajVolSom').onchange = () => tocar('teste');
+  $('ajTestarSom').onclick = () => tocar('teste');
+  $('ajNotif').onchange = async () => {
+    if ($('ajNotif').checked) {
+      if (!('Notification' in window)) { toast('Este navegador não tem notificações.', 'aviso'); $('ajNotif').checked = false; return; }
+      const r = await Notification.requestPermission();
+      if (r !== 'granted') { toast('As notificações foram bloqueadas. Libere no cadeado ao lado do endereço.', 'aviso'); $('ajNotif').checked = false; return; }
+    }
+    notif = $('ajNotif').checked; salvar('notif', notif ? '1' : '0');
+  };
+  document.querySelectorAll('#ajLayout button').forEach(b => b.onclick = () => { layout = b.dataset.l; salvar('layout', layout); aplicarLayout(); });
+  $('ajChat').onchange = () => { mostrarChat = $('ajChat').checked; salvar('chat', mostrarChat ? '1' : '0'); aplicarLayout(); };
+  aplicarLayout();
+
   /* =================== CHAT =================== */
   const vistas = new Set(); let naoLidas = 0;
   const hora = ts => new Date(ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-  function addMsg(m) {
+  function addMsg(m, doHistorico) {
     if (!m || !m.uid || vistas.has(m.uid)) return;   // evita repetir quando o hub muda
     vistas.add(m.uid);
+    if (!doHistorico) avisarEvento(m);
     const box = $('msgs');
     const noFim = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
     const div = document.createElement('div');
     if (!m.nome) { div.className = 'msg sis'; div.textContent = m.texto; }
     else {
       div.className = 'msg';
-      const q = document.createElement('span'); q.className = 'quem'; q.style.color = corDe(m.nome).replace('45%', '68%'); q.textContent = m.nome;
+      const q = document.createElement('span'); q.className = 'quem'; q.style.color = m.cor ? clarear(m.cor) : corDe(m.nome).replace('45%', '68%'); q.textContent = m.nome;
       const t = document.createElement('span'); t.textContent = m.texto;
       const h = document.createElement('span'); h.className = 'hora'; h.textContent = hora(m.ts);
       div.append(q, t, h);
@@ -713,9 +915,9 @@ function entrar(nome, sala) {
     box.appendChild(div);
     while (box.children.length > 200) box.firstChild.remove();
     if (noFim || m.id === euId) box.scrollTop = box.scrollHeight;
-    if (document.hidden && m.nome && m.id !== euId) { naoLidas++; document.title = `(${naoLidas}) Telinha · ${sala}`; }
+    if (document.hidden && m.nome && m.id !== euId) { naoLidas++; document.title = `(${naoLidas}) Midori Xernoba · ${sala}`; }
   }
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) { naoLidas = 0; document.title = 'Telinha · ' + sala; } });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { naoLidas = 0; document.title = 'Midori Xernoba · ' + sala; } });
   $('formChat').onsubmit = e => {
     e.preventDefault();
     const inp = $('inChat'), texto = inp.value.trim();
@@ -1003,7 +1205,7 @@ function entrar(nome, sala) {
     }
   });
   peer.on('disconnected', () => setTimeout(() => { try { peer.reconnect(); } catch (e) {} }, 2000));
-  window.addEventListener('beforeunload', () => { if (avisoDoHub) avisoDoHub(`${nome} saiu da sala`); saindo = true; try { hubConn && hubConn.open && hubConn.send({ tipo: 'tchau' }); } catch (e) {} try { peer.destroy(); } catch (e) {} try { hubPeer && hubPeer.destroy(); } catch (e) {} });
+  window.addEventListener('beforeunload', () => { if (avisoDoHub) avisoDoHub(`${nome} saiu da sala`, null, null, 'saiu', euId); saindo = true; try { hubConn && hubConn.open && hubConn.send({ tipo: 'tchau' }); } catch (e) {} try { peer.destroy(); } catch (e) {} try { hubPeer && hubPeer.destroy(); } catch (e) {} });
 }
 
 // já veio com ?sala= e tem nome salvo: entra direto
