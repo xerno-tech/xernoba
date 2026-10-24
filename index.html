@@ -79,7 +79,12 @@
   .membro .voz { font-size:12px; }
   .membro .volVoz { width:64px; accent-color:var(--ok); display:none; }
   .membro:hover .volVoz { display:block; }
-  #vozBox { display:flex; align-items:center; gap:6px; }
+  #vozBox { display:flex; align-items:center; gap:6px; position:relative; }
+  #popMic { position:absolute; top:calc(100% + 8px); right:0; z-index:15; width:300px; background:var(--panel); border:1px solid var(--linha);
+            border-radius:12px; padding:14px; display:flex; flex-direction:column; gap:10px; box-shadow:0 10px 30px rgba(0,0,0,.45); }
+  #popMic h3 { margin:0; font-size:14px; }
+  #nivelMic { height:6px; background:var(--panel2); border-radius:3px; overflow:hidden; }
+  #nivelMic i { display:block; height:100%; width:0; background:var(--ok); transition:width .1s; }
   button.ok { background:#1f8a5b; } button.ok:hover { background:#1a7a50; }
   button.mudo { background:var(--panel2); border:1px solid rgba(255,77,94,.6); color:#ff8f9a; }
   .avatar.live::after { content:""; position:absolute; right:-1px; bottom:-1px; width:10px; height:10px; border-radius:50%; background:var(--live); border:2px solid var(--panel); }
@@ -188,6 +193,14 @@
     <div id="vozBox">
       <button class="sec" id="btnVoz" title="Conversar por voz aqui na sala">🎙️ Entrar na voz</button>
       <button class="sec oculto" id="btnMic" title="Mutar / desmutar">🎙️</button>
+      <button class="sec oculto" id="btnMicCfg" title="Escolher o microfone">⚙️</button>
+      <div id="popMic" class="oculto">
+        <h3>Microfone</h3>
+        <select id="selMic"></select>
+        <div id="nivelMic" title="Fale para testar"><i></i></div>
+        <span class="mut" style="font-size:12px">Fale para ver a barrinha mexer. Dá para trocar a qualquer momento, sem sair da voz.</span>
+        <div class="rodape"><button id="btnMicOk">Pronto</button></div>
+      </div>
       <button class="sec oculto" id="btnSairVoz" title="Sair da voz">📞 Sair</button>
     </div>
     <button id="btnTransmitir">📡 Transmitir</button>
@@ -452,7 +465,7 @@ function entrar(nome, sala) {
   /* =================== VOZ =================== */
   // As vozes tocam nesta mesma página. Assim, ao transmitir a tela inteira,
   // o Chrome tira esse som da transmissão e ninguém se ouve de volta.
-  let emVoz = false, mudo = ler('mudo') === '1', mic = null, ctxVoz = null;
+  let emVoz = false, mudo = ler('mudo') === '1', mic = null, ctxVoz = null, micId = ler('micId');
   const vozes = new Map();   // id -> { call, audio, para }
   function medirFala(stream, id) {
     if (!ctxVoz) return () => {};
@@ -504,13 +517,79 @@ function entrar(nome, sala) {
     $('btnVoz').classList.toggle('oculto', emVoz);
     $('btnMic').classList.toggle('oculto', !emVoz);
     $('btnSairVoz').classList.toggle('oculto', !emVoz);
+    $('btnMicCfg').classList.toggle('oculto', !emVoz);
+    if (!emVoz) $('popMic').classList.add('oculto');
     $('btnMic').textContent = mudo ? '🔇 Mudo' : '🎙️ Microfone';
     $('btnMic').classList.toggle('mudo', mudo);
   }
   let pararMinhaFala = null;
+  const pedirMic = id => navigator.mediaDevices.getUserMedia({ audio: {
+    deviceId: id ? { ideal: id } : undefined, echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+
+  // lista de microfones
+  async function listarMics() {
+    const sel = $('selMic');
+    const devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'audioinput');
+    const atual = mic && mic.getAudioTracks()[0] ? mic.getAudioTracks()[0].getSettings().deviceId : micId;
+    sel.innerHTML = '';
+    devs.forEach((d, i) => {
+      const o = document.createElement('option');
+      o.value = d.deviceId;
+      o.textContent = d.deviceId === 'default' ? 'Padrão do Windows' + (d.label ? ' · ' + d.label.replace(/^(Default|Padrão)\s*-\s*/i, '') : '')
+                    : d.deviceId === 'communications' ? 'Comunicação do Windows' + (d.label ? ' · ' + d.label.replace(/^(Communications|Comunicações)\s*-\s*/i, '') : '')
+                    : (d.label || `Microfone ${i + 1}`);
+      sel.appendChild(o);
+    });
+    if (atual && [...sel.options].some(o => o.value === atual)) sel.value = atual;
+  }
+  // barrinha de nível no painel
+  let tNivel = null, anNivel = null, fonteNivel = null;
+  function medirNivel() {
+    clearInterval(tNivel); try { fonteNivel && fonteNivel.disconnect(); } catch (e) {}
+    if (!mic || !ctxVoz) return;
+    fonteNivel = ctxVoz.createMediaStreamSource(mic);
+    anNivel = ctxVoz.createAnalyser(); anNivel.fftSize = 512; fonteNivel.connect(anNivel);
+    const buf = new Uint8Array(512);
+    tNivel = setInterval(() => {
+      if ($('popMic').classList.contains('oculto')) return;
+      anNivel.getByteTimeDomainData(buf);
+      let pico = 0; for (const x of buf) pico = Math.max(pico, Math.abs(x - 128));
+      $('nivelMic').firstElementChild.style.width = Math.min(100, pico * 1.6) + '%';
+    }, 80);
+  }
+  async function trocarMic(id) {
+    let novo;
+    try { novo = await pedirMic(id); }
+    catch (e) { toast('Não deu para usar esse microfone: ' + esc(e.message), 'erro'); return; }
+    const faixa = novo.getAudioTracks()[0];
+    faixa.enabled = !mudo;
+    for (const v of vozes.values()) {
+      const pc = v.call && v.call.peerConnection; if (!pc) continue;
+      for (const snd of pc.getSenders()) if (snd.track && snd.track.kind === 'audio') try { await snd.replaceTrack(faixa); } catch (e) {}
+    }
+    if (mic) mic.getTracks().forEach(t => t.stop());
+    mic = novo;
+    micId = id; salvar('micId', id);
+    if (pararMinhaFala) pararMinhaFala();
+    pararMinhaFala = medirFala(mic, euId);
+    medirNivel();
+    toast('🎙️ Microfone trocado: ' + esc($('selMic').selectedOptions[0] ? $('selMic').selectedOptions[0].textContent : ''));
+  }
+  $('selMic').onchange = () => trocarMic($('selMic').value);
+  $('btnMicCfg').onclick = async () => {
+    const pop = $('popMic');
+    const abrir = pop.classList.contains('oculto');
+    pop.classList.toggle('oculto', !abrir);
+    if (abrir) await listarMics();
+  };
+  $('btnMicOk').onclick = () => $('popMic').classList.add('oculto');
+  document.addEventListener('click', e => { if (!$('vozBox').contains(e.target)) $('popMic').classList.add('oculto'); });
+  navigator.mediaDevices.addEventListener('devicechange', () => { if (!$('popMic').classList.contains('oculto')) listarMics(); });
+
   async function entrarVoz() {
+    const primeiraVez = !micId;
     try {
-      mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+      mic = await pedirMic(micId);
     } catch (e) {
       toast('Não deu para usar o microfone. Libere no ícone do cadeado ao lado do endereço.', 'erro'); return;
     }
@@ -520,6 +599,11 @@ function entrar(nome, sala) {
     pararMinhaFala = medirFala(mic, euId);
     emVoz = true;
     atualizarBotoesVoz(); enviarEstado(); renderLista();
+    medirNivel();
+    if (primeiraVez) {
+      micId = mic.getAudioTracks()[0].getSettings().deviceId || 'default'; salvar('micId', micId);
+      await listarMics(); $('popMic').classList.remove('oculto');
+    }
     toast('🎙️ Você entrou na voz. Se alguém transmitir a tela inteira, as vozes daqui não vão junto.');
   }
   function sairVoz() {
@@ -528,6 +612,7 @@ function entrar(nome, sala) {
     if (mic) mic.getTracks().forEach(t => t.stop());
     mic = null;
     if (pararMinhaFala) { pararMinhaFala(); pararMinhaFala = null; }
+    clearInterval(tNivel);
     atualizarBotoesVoz(); enviarEstado(); renderLista();
   }
   $('btnVoz').onclick = entrarVoz;
