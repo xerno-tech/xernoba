@@ -48,6 +48,14 @@
   .pilula::before { content:""; width:8px; height:8px; border-radius:50%; background:var(--live); animation:pulsa 1.6s infinite; }
   @keyframes pulsa { 50% { opacity:.35; } }
 
+  #faixaSom { display:flex; align-items:center; gap:12px; padding:10px 14px; background:rgba(255,179,71,.1);
+              border-bottom:1px solid rgba(255,179,71,.35); }
+  #faixaSom .ic { font-size:20px; }
+  #faixaSom .txt { flex:1; display:flex; flex-direction:column; gap:2px; font-size:14px; }
+  #faixaSom .txt span { font-size:12px; color:var(--mut); }
+  #faixaSom .txt span b { color:var(--txt); font-weight:600; }
+  #btnSom.semSom { border-color:rgba(255,179,71,.6); color:#ffd08a; }
+  body.limpo #faixaSom { display:none; }
   #corpo { flex:1; display:flex; min-height:0; }
   #membros { width:240px; flex-shrink:0; background:var(--panel); border-right:1px solid var(--linha); padding:12px 10px; overflow:auto; }
   #membros h2 { font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--mut); margin:2px 6px 10px; font-weight:600; }
@@ -154,10 +162,18 @@
     <span class="esp"></span>
     <div id="aoVivoBox" class="oculto">
       <span class="pilula" id="pilula">AO VIVO</span>
+      <button class="sec" id="btnSom" title="Escolher de onde vem o som">🔊 Som</button>
       <button class="sec" id="btnTrocar">Trocar</button>
       <button class="perigo" id="btnParar">Parar</button>
     </div>
     <button id="btnTransmitir">📡 Transmitir</button>
+  </div>
+  <div id="faixaSom" class="oculto">
+    <span class="ic">🔇</span>
+    <div class="txt"><b>Sua transmissão está sem som.</b>
+      <span>Clique em <b>Adicionar som</b>, escolha a <b>janela do jogo</b> e ligue <b>"Partilhar também o áudio da app"</b>.</span></div>
+    <button id="btnFaixaSom">Adicionar som</button>
+    <button class="link" id="btnFaixaFechar" title="Seguir sem som">✕</button>
   </div>
   <div id="corpo">
     <div id="membros"><h2 id="tituloMembros">Na sala</h2><div id="lista"></div></div>
@@ -198,8 +214,8 @@
       </ol>
 
       <ol class="passos oculto" id="cfgTela">
-        <li>Clique em <b>Começar</b> e escolha a <b>tela</b> que vai aparecer.</li>
-        <li>Em seguida, escolha a <b>janela do jogo</b>: dela vem só o som.</li>
+        <li>Clique em <b>Começar</b> e escolha a <b>tela</b>.</li>
+        <li>Depois, clique em <b>Adicionar som</b> e escolha a janela do jogo: dela vem só o som.</li>
       </ol>
 
       <div class="nota oculto" id="notaJogo">Se o jogo aparecer <b>preto</b>, coloque-o em <b>janela sem bordas</b> nas configurações de vídeo dele.</div>
@@ -214,21 +230,6 @@
       <div class="rodape">
         <button class="sec" data-fechar>Cancelar</button>
         <button class="grande" id="btnComecar">Começar</button>
-      </div>
-    </div>
-
-    <!-- Passo 3: som da tela inteira -->
-    <div class="passo oculto" id="pSom">
-      <div class="topo"><h2>Agora o som 🔊</h2></div>
-      <div class="nota" style="font-size:13px">Sua tela já está ao vivo. Falta escolher <b>de onde vem o som</b>, para ir só o do jogo, sem Discord.</div>
-      <ol class="passos">
-        <li>Clique em <b>Escolher o som</b>.</li>
-        <li>Na aba <b>Janela</b>, clique no <b>jogo</b>.</li>
-        <li>Ligue <b>"Partilhar também o áudio da app"</b> e confirme.</li>
-      </ol>
-      <div class="rodape">
-        <button class="sec" id="btnSemSom">Seguir sem som</button>
-        <button class="grande" id="btnEscolherSom">Escolher o som</button>
       </div>
     </div>
 
@@ -434,7 +435,7 @@ function entrar(nome, sala) {
   const modal = $('modal');
   const TITULOS = { console: '🎮 Console', janela: '🕹️ Jogo do PC', tela: '🖥️ Tela inteira' };
   const DICAS_QUAL = { 3000: 'Para internet mais fraca ou 3+ pessoas assistindo.', 6000: 'Recomendado para a maioria.', 10000: 'Imagem mais nítida. Precisa de internet muito boa.' };
-  function mostrarPasso(id) { for (const p of ['pFonte', 'pConfig', 'pSom']) $(p).classList.toggle('oculto', p !== id); modal.classList.remove('oculto'); }
+  function mostrarPasso(id) { for (const p of ['pFonte', 'pConfig']) $(p).classList.toggle('oculto', p !== id); modal.classList.remove('oculto'); }
   function fecharModal() { modal.classList.add('oculto'); }
   function abrirModal() { mostrarPasso('pFonte'); }
   function atualizarQual() {
@@ -463,8 +464,8 @@ function entrar(nome, sala) {
   });
   $('btnVoltar').onclick = () => mostrarPasso('pFonte');
   document.querySelectorAll('[data-fechar]').forEach(b => b.onclick = fecharModal);
-  modal.onclick = e => { if (e.target === modal && $('pSom').classList.contains('oculto')) fecharModal(); };
-  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !modal.classList.contains('oculto') && $('pSom').classList.contains('oculto')) fecharModal(); });
+  modal.onclick = e => { if (e.target === modal) fecharModal(); };
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !modal.classList.contains('oculto')) fecharModal(); });
 
   $('btnComecar').onclick = () => { fecharModal(); iniciarTransmissao(); };
 
@@ -489,8 +490,7 @@ function entrar(nome, sala) {
       });
       // garantia: som do PC inteiro nunca vai
       if (s.getVideoTracks()[0].getSettings().displaySurface === 'monitor') s.getAudioTracks().forEach(t => { t.stop(); s.removeTrack(t); });
-      if (!s.getAudioTracks().length) toast('Foi <b>sem som</b>: a opção "Partilhar também o áudio da app" ficou desligada. Clique em <b>Trocar</b> para refazer.', 'aviso', 9000);
-      return { s, faltaSom: false };
+      return { s, faltaSom: !s.getAudioTracks().length };
     }
     // tela inteira: só a imagem aqui; o som vem de uma janela depois
     const s = await navigator.mediaDevices.getDisplayMedia({
@@ -523,65 +523,82 @@ function entrar(nome, sala) {
     $('aoVivoBox').classList.toggle('oculto', !aoVivo);
     $('btnTransmitir').classList.toggle('oculto', aoVivo);
     const n = assistentes.size;
-    $('pilula').textContent = `AO VIVO · ${n} ${n === 1 ? 'assistindo' : 'assistindo'}`;
+    $('pilula').textContent = `AO VIVO · ${n} assistindo`;
+    atualizarSom();
   }
 
-  async function iniciarTransmissao() {
-    try {
-      const { s, faltaSom } = await capturar();
-      const vt = s.getVideoTracks()[0];
-      if (vt) { vt.contentHint = 'motion'; vt.onended = () => pararTransmissao(); }
-      s.getAudioTracks().forEach(t => t.contentHint = 'music');
-      if (stream) { stream.getVideoTracks().forEach(t => t.onended = null); stream.getTracks().forEach(t => t.stop()); }
-      pararExtras();
-      stream = s; aoVivo = true;
-      if (!telaLocal) telaLocal = criarTela('eu', nome, true);
-      telaLocal.querySelector('video').srcObject = stream;
-      telaLocal.querySelector('.aviso').classList.add('oculto');
-      for (const id of assistentes.keys()) enviarPara(id);
-      atualizarAoVivo();
-      enviarEstado();
-      if (faltaSom) mostrarPasso('pSom');
-      else toast('Você está <b>ao vivo</b>. Seus amigos já podem clicar em Assistir.');
-    } catch (e) {
-      if (e.name === 'NotAllowedError') return;   // cancelou a escolha
-      toast('Não deu para começar: ' + esc(e.message) + (fonte === 'console' ? '<br>Feche OBS, VLC ou outra guia que esteja usando a placa.' : ''), 'erro', 9000);
-    }
+  /* ---- Som: um botão só, em qualquer modo ---- */
+  let semSomOk = false;   // a pessoa escolheu ficar sem som
+  const temSom = () => !!stream && stream.getAudioTracks().some(t => t.readyState === 'live');
+  function atualizarSom() {
+    const ok = temSom();
+    const b = $('btnSom');
+    b.textContent = ok ? '🔊 Som do jogo' : '🔇 Adicionar som';
+    b.classList.toggle('semSom', !ok);
+    $('faixaSom').classList.toggle('oculto', !aoVivo || ok || semSomOk);
   }
-  function pararTransmissao() {
-    if (stream) { stream.getVideoTracks().forEach(t => t.onended = null); stream.getTracks().forEach(t => t.stop()); }
-    pararExtras();
-    stream = null; aoVivo = false;
-    for (const a of assistentes.values()) if (a.call) try { a.call.close(); } catch (e) {}
-    if (telaLocal) { telaLocal.remove(); telaLocal = null; atualizarVazio(); }
-    if (!$('pSom').classList.contains('oculto')) fecharModal();
-    atualizarAoVivo();
-    enviarEstado();
-  }
-
-  // --- som da tela inteira, vindo de uma janela ---
-  $('btnSemSom').onclick = () => { fecharModal(); toast('Ao vivo <b>sem som</b>. Para adicionar, clique em <b>Trocar</b>.', 'aviso'); };
-  $('btnEscolherSom').onclick = async () => {
-    if (!stream) return fecharModal();
+  async function adicionarSom() {
+    if (!stream) return;
     try {
       const so = await navigator.mediaDevices.getDisplayMedia({
         video: true, audio: { ...SEM_PROC, restrictOwnAudio: true },
         systemAudio: 'exclude', windowAudio: 'window', monitorTypeSurfaces: 'exclude', selfBrowserSurface: 'exclude'
       });
       const at = so.getAudioTracks()[0];
+      if (at) pararExtras();   // larga a janela de som anterior, se houver
       // a imagem desta janela não é usada; fica desligada (parar poderia encerrar o som)
-      so.getVideoTracks().forEach(t => { t.enabled = false; extras.push(t); });
-      if (!at) { pararExtras(); toast('Não veio som. Ligue <b>"Partilhar também o áudio da app"</b> e tente de novo.', 'aviso'); return; }
+      so.getVideoTracks().forEach(t => { t.enabled = false; if (at) extras.push(t); });
+      if (!at) { so.getVideoTracks().forEach(t => t.stop()); toast('Não veio som: a opção <b>"Partilhar também o áudio da app"</b> ficou desligada. Clique em <b>Adicionar som</b> de novo.', 'aviso', 8000); return; }
       at.contentHint = 'music';
+      at.onended = atualizarSom;   // se parar de compartilhar a janela, a faixa volta
       stream.getAudioTracks().forEach(t => { t.stop(); stream.removeTrack(t); });
       stream.addTrack(at);
+      semSomOk = false;
       for (const id of assistentes.keys()) enviarPara(id);
-      fecharModal();
-      toast('Pronto! Tela inteira com o <b>som só do jogo</b>. Você está ao vivo.');
+      atualizarSom();
+      toast('🔊 Som adicionado: vai só o som do jogo.');
     } catch (e) {
       if (e.name !== 'NotAllowedError') toast('Não deu para pegar o som: ' + esc(e.message), 'erro');
     }
+  }
+  $('btnSom').onclick = () => {
+    if (fonte === 'console') document.querySelector('.opcao[data-fonte=console]').click();   // trocar o som da placa
+    else adicionarSom();
   };
+  $('btnFaixaSom').onclick = adicionarSom;
+  $('btnFaixaFechar').onclick = () => { semSomOk = true; atualizarSom(); };
+
+  async function iniciarTransmissao() {
+    try {
+      const { s, faltaSom } = await capturar();
+      const vt = s.getVideoTracks()[0];
+      if (vt) { vt.contentHint = 'motion'; vt.onended = () => pararTransmissao(); }
+      s.getAudioTracks().forEach(t => { t.contentHint = 'music'; t.onended = atualizarSom; });
+      if (stream) { stream.getVideoTracks().forEach(t => t.onended = null); stream.getTracks().forEach(t => { t.onended = null; t.stop(); }); }
+      pararExtras();
+      stream = s; aoVivo = true;
+      semSomOk = fonte === 'console' && selAudio.value === 'nenhum';
+      if (!telaLocal) telaLocal = criarTela('eu', nome, true);
+      telaLocal.querySelector('video').srcObject = stream;
+      telaLocal.querySelector('.aviso').classList.add('oculto');
+      for (const id of assistentes.keys()) enviarPara(id);
+      atualizarAoVivo();
+      enviarEstado();
+      if (!faltaSom) toast('Você está <b>ao vivo</b>. Seus amigos já podem clicar em Assistir.');
+    } catch (e) {
+      if (e.name === 'NotAllowedError') return;   // cancelou a escolha
+      toast('Não deu para começar: ' + esc(e.message) + (fonte === 'console' ? '<br>Feche OBS, VLC ou outra guia que esteja usando a placa.' : ''), 'erro', 9000);
+    }
+  }
+  function pararTransmissao() {
+    if (stream) { stream.getVideoTracks().forEach(t => t.onended = null); stream.getTracks().forEach(t => { t.onended = null; t.stop(); }); }
+    pararExtras();
+    stream = null; aoVivo = false;
+    for (const a of assistentes.values()) if (a.call) try { a.call.close(); } catch (e) {}
+    if (telaLocal) { telaLocal.remove(); telaLocal = null; atualizarVazio(); }
+    atualizarAoVivo();
+    enviarEstado();
+  }
 
   $('btnTransmitir').onclick = abrirModal;
   $('btnTrocar').onclick = abrirModal;
