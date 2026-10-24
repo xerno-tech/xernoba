@@ -75,6 +75,13 @@
   .membro:hover { background:var(--panel2); }
   .avatar { width:30px; height:30px; border-radius:50%; flex-shrink:0; display:flex; align-items:center; justify-content:center;
             font-size:13px; font-weight:700; color:#fff; position:relative; }
+  .avatar.falando { box-shadow:0 0 0 2px var(--panel), 0 0 0 4px var(--ok); }
+  .membro .voz { font-size:12px; }
+  .membro .volVoz { width:64px; accent-color:var(--ok); display:none; }
+  .membro:hover .volVoz { display:block; }
+  #vozBox { display:flex; align-items:center; gap:6px; }
+  button.ok { background:#1f8a5b; } button.ok:hover { background:#1a7a50; }
+  button.mudo { background:var(--panel2); border:1px solid rgba(255,77,94,.6); color:#ff8f9a; }
   .avatar.live::after { content:""; position:absolute; right:-1px; bottom:-1px; width:10px; height:10px; border-radius:50%; background:var(--live); border:2px solid var(--panel); }
   .membro .info { flex:1; min-width:0; display:flex; flex-direction:column; }
   .membro .n { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:14px; }
@@ -177,6 +184,11 @@
       <button class="sec" id="btnSom" title="Escolher de onde vem o som">🔊 Som</button>
       <button class="sec" id="btnTrocar">Trocar</button>
       <button class="perigo" id="btnParar">Parar</button>
+    </div>
+    <div id="vozBox">
+      <button class="sec" id="btnVoz" title="Conversar por voz aqui na sala">🎙️ Entrar na voz</button>
+      <button class="sec oculto" id="btnMic" title="Mutar / desmutar">🎙️</button>
+      <button class="sec oculto" id="btnSairVoz" title="Sair da voz">📞 Sair</button>
     </div>
     <button id="btnTransmitir">📡 Transmitir</button>
   </div>
@@ -351,14 +363,15 @@ function entrar(nome, sala) {
         if (d.tipo === 'tchau') { sairDe(c.peer); return; }
         if (d.tipo === 'estado') {
           const antes = roster.get(c.peer);
-          const m = { id: c.peer, nome: String(d.nome).slice(0, 24), live: !!d.live };
+          const m = { id: c.peer, nome: String(d.nome).slice(0, 24), live: !!d.live, voz: !!d.voz, mudo: !!d.mudo };
           roster.set(c.peer, m);
           if (!antes) {
             try { c.send({ tipo: 'historico', msgs: historico }); } catch (e) {}
             // quem só está se reconectando a um hub novo não é anunciado de novo
             if (!d.voltando) registrar(`${m.nome} entrou na sala`);
-          } else if (antes.live !== m.live) {
-            registrar(m.live ? `${m.nome} começou a transmitir` : `${m.nome} parou de transmitir`);
+          } else {
+            if (antes.live !== m.live) registrar(m.live ? `${m.nome} começou a transmitir` : `${m.nome} parou de transmitir`);
+            if (antes.voz !== m.voz) registrar(m.voz ? `${m.nome} entrou na voz` : `${m.nome} saiu da voz`);
           }
           difundir();
         } else if (d.tipo === 'chat') {
@@ -395,7 +408,7 @@ function entrar(nome, sala) {
   let jaEntrei = false;
   function enviarEstado() {
     if (!hubConn || !hubConn.open) return;
-    hubConn.send({ tipo: 'estado', nome, live: aoVivo, voltando: jaEntrei });
+    hubConn.send({ tipo: 'estado', nome, live: aoVivo, voz: emVoz, mudo: emVoz && mudo, voltando: jaEntrei });
     jaEntrei = true;
   }
   setInterval(enviarEstado, 5000);
@@ -410,9 +423,18 @@ function entrar(nome, sala) {
       const eu = m.id === euId;
       const div = document.createElement('div');
       div.className = 'membro';
-      div.innerHTML = `<div class="avatar ${m.live ? 'live' : ''}" style="background:${corDe(m.nome)}">${esc(m.nome.charAt(0).toUpperCase())}</div>
+      const status = m.live ? 'Ao vivo' : m.voz ? (m.mudo ? 'Na voz · mudo' : 'Na voz') : 'Assistindo';
+      div.innerHTML = `<div class="avatar ${m.live ? 'live' : ''}" data-av="${esc(m.id)}" style="background:${corDe(m.nome)}">${esc(m.nome.charAt(0).toUpperCase())}</div>
         <div class="info"><span class="n">${esc(m.nome)}${eu ? ' <span class="mut">(você)</span>' : ''}</span>
-        <span class="s ${m.live ? 'live' : ''}">${m.live ? 'Ao vivo' : 'Assistindo'}</span></div>`;
+        <span class="s ${m.live ? 'live' : ''}">${status}</span></div>
+        ${m.voz ? `<span class="voz" title="${m.mudo ? 'Mudo' : 'Na voz'}">${m.mudo ? '🔇' : '🎙️'}</span>` : ''}`;
+      if (m.voz && !eu && emVoz) {
+        const r = document.createElement('input');
+        r.type = 'range'; r.min = 0; r.max = 1; r.step = 0.01; r.className = 'volVoz'; r.title = 'Volume da voz';
+        r.value = ler('volVoz-' + m.nome) || '1';
+        r.oninput = () => { salvar('volVoz-' + m.nome, r.value); const v = vozes.get(m.id); if (v && v.audio) v.audio.volume = Number(r.value); };
+        div.appendChild(r);
+      }
       if (m.live && !eu) {
         const vendo = assistindo.has(m.id);
         const b = document.createElement('button');
@@ -424,7 +446,98 @@ function entrar(nome, sala) {
       el.appendChild(div);
     }
     for (const id of [...assistindo.keys()]) if (!membros.some(m => m.id === id && m.live)) pararDeAssistir(id);
+    sincronizarVoz();
   }
+
+  /* =================== VOZ =================== */
+  // As vozes tocam nesta mesma página. Assim, ao transmitir a tela inteira,
+  // o Chrome tira esse som da transmissão e ninguém se ouve de volta.
+  let emVoz = false, mudo = ler('mudo') === '1', mic = null, ctxVoz = null;
+  const vozes = new Map();   // id -> { call, audio, para }
+  function medirFala(stream, id) {
+    if (!ctxVoz) return () => {};
+    const fonte = ctxVoz.createMediaStreamSource(stream);
+    const an = ctxVoz.createAnalyser(); an.fftSize = 512; fonte.connect(an);
+    const buf = new Uint8Array(an.fftSize);
+    const tm = setInterval(() => {
+      an.getByteTimeDomainData(buf);
+      let pico = 0; for (const x of buf) pico = Math.max(pico, Math.abs(x - 128));
+      const fala = pico > 10 && !(id === euId && mudo);
+      document.querySelectorAll(`[data-av="${CSS.escape(id)}"]`).forEach(a => a.classList.toggle('falando', fala));
+    }, 150);
+    return () => { clearInterval(tm); try { fonte.disconnect(); } catch (e) {} };
+  }
+  function ligarVoz(id, call) {
+    const antiga = vozes.get(id);
+    if (antiga && antiga.call !== call) fecharVoz(id);
+    const item = { call, audio: null, para: null };
+    vozes.set(id, item);
+    call.on('stream', s => {
+      if (item.audio) return;
+      const a = new Audio(); a.autoplay = true; a.srcObject = s;
+      const m = membros.find(x => x.id === id);
+      a.volume = Number(ler('volVoz-' + (m ? m.nome : '')) || 1);
+      a.play().catch(() => {});
+      item.audio = a; item.para = medirFala(s, id);
+    });
+    const fim = () => { if (vozes.get(id) === item) fecharVoz(id); };
+    call.on('close', fim); call.on('error', fim);
+  }
+  function fecharVoz(id) {
+    const v = vozes.get(id); if (!v) return;
+    vozes.delete(id);
+    try { v.call.close(); } catch (e) {}
+    if (v.audio) { v.audio.srcObject = null; }
+    if (v.para) v.para();
+    document.querySelectorAll(`[data-av="${CSS.escape(id)}"]`).forEach(a => a.classList.remove('falando'));
+  }
+  function sincronizarVoz() {
+    if (!emVoz || !mic) return;
+    const naVoz = new Set(membros.filter(m => m.voz && m.id !== euId).map(m => m.id));
+    for (const id of [...vozes.keys()]) if (!naVoz.has(id)) fecharVoz(id);
+    // só um dos dois liga, para não abrir duas conexões
+    for (const id of naVoz) if (!vozes.has(id) && euId < id) {
+      ligarVoz(id, peer.call(id, mic, { metadata: { tipo: 'voz' } }));
+    }
+  }
+  function atualizarBotoesVoz() {
+    $('btnVoz').classList.toggle('oculto', emVoz);
+    $('btnMic').classList.toggle('oculto', !emVoz);
+    $('btnSairVoz').classList.toggle('oculto', !emVoz);
+    $('btnMic').textContent = mudo ? '🔇 Mudo' : '🎙️ Microfone';
+    $('btnMic').classList.toggle('mudo', mudo);
+  }
+  let pararMinhaFala = null;
+  async function entrarVoz() {
+    try {
+      mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+    } catch (e) {
+      toast('Não deu para usar o microfone. Libere no ícone do cadeado ao lado do endereço.', 'erro'); return;
+    }
+    ctxVoz = ctxVoz || new AudioContext();
+    ctxVoz.resume().catch(() => {});
+    mic.getAudioTracks().forEach(t => t.enabled = !mudo);
+    pararMinhaFala = medirFala(mic, euId);
+    emVoz = true;
+    atualizarBotoesVoz(); enviarEstado(); renderLista();
+    toast('🎙️ Você entrou na voz. Se alguém transmitir a tela inteira, as vozes daqui não vão junto.');
+  }
+  function sairVoz() {
+    emVoz = false;
+    for (const id of [...vozes.keys()]) fecharVoz(id);
+    if (mic) mic.getTracks().forEach(t => t.stop());
+    mic = null;
+    if (pararMinhaFala) { pararMinhaFala(); pararMinhaFala = null; }
+    atualizarBotoesVoz(); enviarEstado(); renderLista();
+  }
+  $('btnVoz').onclick = entrarVoz;
+  $('btnSairVoz').onclick = sairVoz;
+  $('btnMic').onclick = () => {
+    mudo = !mudo; salvar('mudo', mudo ? '1' : '0');
+    if (mic) mic.getAudioTracks().forEach(t => t.enabled = !mudo);
+    atualizarBotoesVoz(); enviarEstado(); renderLista();
+  };
+  atualizarBotoesVoz();
 
   /* ---- Telas na grade ---- */
   function criarTela(id, titulo, local) {
@@ -740,6 +853,12 @@ function entrar(nome, sala) {
 
   // vídeo chegando de quem eu assisto
   peer.on('call', call => {
+    if (call.metadata && call.metadata.tipo === 'voz') {
+      if (!emVoz || !mic) { try { call.close(); } catch (e) {} return; }
+      call.answer(mic);
+      ligarVoz(call.peer, call);
+      return;
+    }
     const it = assistindo.get(call.peer);
     if (!it) { try { call.close(); } catch (e) {} return; }
     call.answer(undefined, { sdpTransform: sdpEstereo });
