@@ -57,7 +57,19 @@
   #btnSom.semSom { border-color:rgba(255,179,71,.6); color:#ffd08a; }
   body.limpo #faixaSom { display:none; }
   #corpo { flex:1; display:flex; min-height:0; }
-  #membros { width:240px; flex-shrink:0; background:var(--panel); border-right:1px solid var(--linha); padding:12px 10px; overflow:auto; }
+  #membros { width:270px; flex-shrink:0; background:var(--panel); border-right:1px solid var(--linha); display:flex; flex-direction:column; min-height:0; }
+  #areaLista { padding:12px 10px; overflow:auto; max-height:45%; flex-shrink:0; }
+  #chat { flex:1; display:flex; flex-direction:column; min-height:0; border-top:1px solid var(--linha); }
+  #chat h2 { padding:12px 16px 0; }
+  #msgs { flex:1; overflow-y:auto; padding:4px 12px 8px; display:flex; flex-direction:column; gap:6px; font-size:13px; line-height:1.4; }
+  .msg { word-wrap:break-word; overflow-wrap:anywhere; }
+  .msg .quem { font-weight:600; margin-right:5px; }
+  .msg .hora { font-size:10px; color:var(--mut); margin-left:4px; }
+  .msg.sis { color:var(--mut); font-size:12px; font-style:italic; }
+  .msg.sis::before { content:"• "; }
+  #formChat { display:flex; gap:6px; padding:10px; border-top:1px solid var(--linha); }
+  #formChat input { flex:1; padding:8px 10px; }
+  #formChat button { padding:8px 12px; }
   #membros h2 { font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--mut); margin:2px 6px 10px; font-weight:600; }
   .membro { display:flex; align-items:center; gap:10px; padding:7px 8px; border-radius:9px; }
   .membro:hover { background:var(--panel2); }
@@ -135,7 +147,7 @@
     #barra { flex-wrap:wrap; }
     .marca { display:none; }
     #corpo { flex-direction:column; }
-    #membros { width:auto; max-height:30vh; border-right:0; border-bottom:1px solid var(--linha); }
+    #membros { width:auto; height:42vh; border-right:0; border-bottom:1px solid var(--linha); }
     #grade { grid-template-columns:1fr; }
     .tela .ctrl { opacity:1; }
   }
@@ -176,7 +188,17 @@
     <button class="link" id="btnFaixaFechar" title="Seguir sem som">✕</button>
   </div>
   <div id="corpo">
-    <div id="membros"><h2 id="tituloMembros">Na sala</h2><div id="lista"></div></div>
+    <div id="membros">
+      <div id="areaLista"><h2 id="tituloMembros">Na sala</h2><div id="lista"></div></div>
+      <div id="chat">
+        <h2>Chat</h2>
+        <div id="msgs"></div>
+        <form id="formChat" autocomplete="off">
+          <input type="text" id="inChat" maxlength="300" placeholder="Mandar mensagem…">
+          <button type="submit" title="Enviar">➤</button>
+        </form>
+      </div>
+    </div>
     <div id="grade">
       <div id="vazio"><div class="grande">🍿</div>Ninguém na tela ainda.<br>Clique em <b>Assistir</b> ao lado de quem está <b style="color:#ff8f9a">ao vivo</b>, ou em <b>Transmitir</b> para mostrar o seu jogo.</div>
     </div>
@@ -290,7 +312,7 @@ function entrar(nome, sala) {
   document.title = 'Telinha · ' + sala;
   const HUB = 'telinha-hub-' + sala;
 
-  let peer = null, hubPeer = null, hubConn = null, euId = null;
+  let peer = null, hubPeer = null, hubConn = null, euId = null, saindo = false, avisoDoHub = null;
   let stream = null, aoVivo = false;
   let membros = [];
   const assistentes = new Map();   // quem me assiste: id -> {conn, call}
@@ -301,15 +323,51 @@ function entrar(nome, sala) {
     if (hubPeer) return;
     hubPeer = new Peer(HUB);
     const roster = new Map(), conns = new Map();
+    const historico = [];
+    function sairDe(id) {
+      conns.delete(id); vistoEm.delete(id);
+      const m = roster.get(id);
+      if (m) { roster.delete(id); registrar(`${m.nome} saiu da sala`); difundir(); }
+    }
+    const vistoEm = new Map();
+    const registrar = (texto, nomeAutor, idAutor) => {
+      if (saindo) return;   // a página está fechando: as conexões caindo não são saídas de verdade
+      const msg = { tipo: 'msg', uid: Math.random().toString(36).slice(2) + Date.now().toString(36), ts: Date.now(), texto, nome: nomeAutor || null, id: idAutor || null };
+      historico.push(msg); if (historico.length > 60) historico.shift();
+      for (const c of conns.values()) if (c.open) try { c.send(msg); } catch (e) {}
+    };
     const difundir = () => {
       const lista = [...roster.values()];
       for (const c of conns.values()) if (c.open) try { c.send({ tipo: 'lista', membros: lista }); } catch (e) {}
     };
-    hubPeer.on('open', () => conectarHub());
+    hubPeer.on('open', () => { avisoDoHub = registrar; conectarHub(); });
+    // quem some sem avisar (aba fechada, internet caiu) sai depois de 15s sem sinal
+    setInterval(() => { const agora = Date.now(); for (const [id, t] of vistoEm) if (agora - t > 15000) { const c = conns.get(id); vistoEm.delete(id); if (c) try { c.close(); } catch (e) {} sairDe(id); } }, 5000);
     hubPeer.on('connection', c => {
       conns.set(c.peer, c);
-      c.on('data', d => { if (d && d.tipo === 'estado') { roster.set(c.peer, { id: c.peer, nome: String(d.nome).slice(0, 24), live: !!d.live }); difundir(); } });
-      const sair = () => { conns.delete(c.peer); roster.delete(c.peer); difundir(); };
+      c.on('data', d => {
+        if (!d) return;
+        vistoEm.set(c.peer, Date.now());
+        if (d.tipo === 'tchau') { sairDe(c.peer); return; }
+        if (d.tipo === 'estado') {
+          const antes = roster.get(c.peer);
+          const m = { id: c.peer, nome: String(d.nome).slice(0, 24), live: !!d.live };
+          roster.set(c.peer, m);
+          if (!antes) {
+            try { c.send({ tipo: 'historico', msgs: historico }); } catch (e) {}
+            // quem só está se reconectando a um hub novo não é anunciado de novo
+            if (!d.voltando) registrar(`${m.nome} entrou na sala`);
+          } else if (antes.live !== m.live) {
+            registrar(m.live ? `${m.nome} começou a transmitir` : `${m.nome} parou de transmitir`);
+          }
+          difundir();
+        } else if (d.tipo === 'chat') {
+          const m = roster.get(c.peer); if (!m) return;
+          const texto = String(d.texto || '').trim().slice(0, 300); if (!texto) return;
+          registrar(texto, m.nome, c.peer);
+        }
+      });
+      const sair = () => sairDe(c.peer);
       c.on('close', sair); c.on('error', sair);
     });
     hubPeer.on('error', e => { if (e.type === 'unavailable-id') { try { hubPeer.destroy(); } catch (x) {} hubPeer = null; conectarHub(); } });
@@ -322,14 +380,25 @@ function entrar(nome, sala) {
     if (hubConn) try { hubConn.close(); } catch (e) {}
     hubConn = peer.connect(HUB, { reliable: true });
     hubConn.on('open', enviarEstado);
-    hubConn.on('data', d => { if (d && d.tipo === 'lista') { membros = d.membros; renderLista(); } });
+    hubConn.on('data', d => {
+      if (!d) return;
+      if (d.tipo === 'lista') { membros = d.membros; renderLista(); }
+      else if (d.tipo === 'msg') addMsg(d);
+      else if (d.tipo === 'historico') (d.msgs || []).forEach(addMsg);
+    });
     hubConn.on('close', () => { hubConn = null; agendarHub(); });
   }
   function agendarHub() {
     clearTimeout(tHub);
     tHub = setTimeout(() => { if (!hubConn || !hubConn.open) virarHub(); if (hubPeer && hubPeer.open) conectarHub(); }, 500 + Math.random() * 2000);
   }
-  function enviarEstado() { if (hubConn && hubConn.open) hubConn.send({ tipo: 'estado', nome, live: aoVivo }); }
+  let jaEntrei = false;
+  function enviarEstado() {
+    if (!hubConn || !hubConn.open) return;
+    hubConn.send({ tipo: 'estado', nome, live: aoVivo, voltando: jaEntrei });
+    jaEntrei = true;
+  }
+  setInterval(enviarEstado, 5000);
 
   /* ---- Lista de quem está na sala ---- */
   function renderLista() {
@@ -397,6 +466,38 @@ function entrar(nome, sala) {
     try { it.conn.close(); } catch (e) {}
     it.tela.remove(); atualizarVazio(); renderLista();
   }
+
+  /* =================== CHAT =================== */
+  const vistas = new Set(); let naoLidas = 0;
+  const hora = ts => new Date(ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  function addMsg(m) {
+    if (!m || !m.uid || vistas.has(m.uid)) return;   // evita repetir quando o hub muda
+    vistas.add(m.uid);
+    const box = $('msgs');
+    const noFim = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+    const div = document.createElement('div');
+    if (!m.nome) { div.className = 'msg sis'; div.textContent = m.texto; }
+    else {
+      div.className = 'msg';
+      const q = document.createElement('span'); q.className = 'quem'; q.style.color = corDe(m.nome).replace('45%', '68%'); q.textContent = m.nome;
+      const t = document.createElement('span'); t.textContent = m.texto;
+      const h = document.createElement('span'); h.className = 'hora'; h.textContent = hora(m.ts);
+      div.append(q, t, h);
+    }
+    box.appendChild(div);
+    while (box.children.length > 200) box.firstChild.remove();
+    if (noFim || m.id === euId) box.scrollTop = box.scrollHeight;
+    if (document.hidden && m.nome && m.id !== euId) { naoLidas++; document.title = `(${naoLidas}) Telinha · ${sala}`; }
+  }
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { naoLidas = 0; document.title = 'Telinha · ' + sala; } });
+  $('formChat').onsubmit = e => {
+    e.preventDefault();
+    const inp = $('inChat'), texto = inp.value.trim();
+    if (!texto) return;
+    if (!hubConn || !hubConn.open) { toast('Ainda conectando à sala… tente de novo em instantes.', 'aviso'); return; }
+    hubConn.send({ tipo: 'chat', texto: texto.slice(0, 300) });
+    inp.value = '';
+  };
 
   /* =================== TRANSMITIR =================== */
   const selVideo = $('selVideo'), selAudio = $('selAudio');
@@ -657,7 +758,7 @@ function entrar(nome, sala) {
     }
   });
   peer.on('disconnected', () => setTimeout(() => { try { peer.reconnect(); } catch (e) {} }, 2000));
-  window.addEventListener('beforeunload', () => { try { peer.destroy(); } catch (e) {} try { hubPeer && hubPeer.destroy(); } catch (e) {} });
+  window.addEventListener('beforeunload', () => { if (avisoDoHub) avisoDoHub(`${nome} saiu da sala`); saindo = true; try { hubConn && hubConn.open && hubConn.send({ tipo: 'tchau' }); } catch (e) {} try { peer.destroy(); } catch (e) {} try { hubPeer && hubPeer.destroy(); } catch (e) {} });
 }
 
 // já veio com ?sala= e tem nome salvo: entra direto
