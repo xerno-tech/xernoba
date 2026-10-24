@@ -198,6 +198,8 @@
         <h3>Microfone</h3>
         <select id="selMic"></select>
         <div id="nivelMic" title="Fale para testar"><i></i></div>
+        <span style="font-size:12px">Em uso: <b id="micEmUso">—</b></span>
+        <label class="marcar"><input type="checkbox" id="chkSemFiltro"> Sem filtros (desliga eco e redução de ruído)</label>
         <span class="mut" style="font-size:12px">Fale para ver a barrinha mexer. Dá para trocar a qualquer momento, sem sair da voz.</span>
         <div class="rodape"><button id="btnMicOk">Pronto</button></div>
       </div>
@@ -466,6 +468,7 @@ function entrar(nome, sala) {
   // As vozes tocam nesta mesma página. Assim, ao transmitir a tela inteira,
   // o Chrome tira esse som da transmissão e ninguém se ouve de volta.
   let emVoz = false, mudo = ler('mudo') === '1', mic = null, ctxVoz = null, micId = ler('micId');
+  let semFiltro = ler('semFiltro') === '1';
   const vozes = new Map();   // id -> { call, audio, para }
   function medirFala(stream, id) {
     if (!ctxVoz) return () => {};
@@ -523,8 +526,21 @@ function entrar(nome, sala) {
     $('btnMic').classList.toggle('mudo', mudo);
   }
   let pararMinhaFala = null;
+  // exige o microfone escolhido: se ele não abrir, dá erro em vez de pegar outro escondido
   const pedirMic = id => navigator.mediaDevices.getUserMedia({ audio: {
-    deviceId: id ? { ideal: id } : undefined, echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+    deviceId: id ? { exact: id } : undefined,
+    echoCancellation: !semFiltro, noiseSuppression: !semFiltro, autoGainControl: !semFiltro } });
+  const ERROS_MIC = {
+    NotReadableError: 'o Windows ou outro programa está segurando esse microfone',
+    OverconstrainedError: 'esse microfone não foi encontrado (desconectado?)',
+    NotAllowedError: 'o navegador não tem permissão para o microfone',
+    NotFoundError: 'nenhum microfone encontrado'
+  };
+  const erroMic = e => ERROS_MIC[e.name] || e.message;
+  function mostrarEmUso() {
+    const t = mic && mic.getAudioTracks()[0];
+    $('micEmUso').textContent = t ? (t.label || 'sem nome') + (t.muted ? ' (sem sinal)' : '') : '—';
+  }
 
   // lista de microfones
   async function listarMics() {
@@ -560,7 +576,10 @@ function entrar(nome, sala) {
   async function trocarMic(id) {
     let novo;
     try { novo = await pedirMic(id); }
-    catch (e) { toast('Não deu para usar esse microfone: ' + esc(e.message), 'erro'); return; }
+    catch (e) {
+      toast('Não deu para abrir esse microfone: ' + esc(erroMic(e)) + '. Continua o anterior.', 'erro', 9000);
+      await listarMics(); return;
+    }
     const faixa = novo.getAudioTracks()[0];
     faixa.enabled = !mudo;
     for (const v of vozes.values()) {
@@ -572,7 +591,8 @@ function entrar(nome, sala) {
     micId = id; salvar('micId', id);
     if (pararMinhaFala) pararMinhaFala();
     pararMinhaFala = medirFala(mic, euId);
-    medirNivel();
+    medirNivel(); mostrarEmUso();
+    faixa.onmute = faixa.onunmute = mostrarEmUso;
     toast('🎙️ Microfone trocado: ' + esc($('selMic').selectedOptions[0] ? $('selMic').selectedOptions[0].textContent : ''));
   }
   $('selMic').onchange = () => trocarMic($('selMic').value);
@@ -580,7 +600,12 @@ function entrar(nome, sala) {
     const pop = $('popMic');
     const abrir = pop.classList.contains('oculto');
     pop.classList.toggle('oculto', !abrir);
-    if (abrir) await listarMics();
+    if (abrir) { if (ctxVoz) ctxVoz.resume().catch(() => {}); await listarMics(); mostrarEmUso(); }
+  };
+  $('chkSemFiltro').checked = semFiltro;
+  $('chkSemFiltro').onchange = () => {
+    semFiltro = $('chkSemFiltro').checked; salvar('semFiltro', semFiltro ? '1' : '0');
+    if (mic) trocarMic($('selMic').value || micId);
   };
   $('btnMicOk').onclick = () => $('popMic').classList.add('oculto');
   document.addEventListener('click', e => { if (!$('vozBox').contains(e.target)) $('popMic').classList.add('oculto'); });
@@ -591,15 +616,18 @@ function entrar(nome, sala) {
     try {
       mic = await pedirMic(micId);
     } catch (e) {
-      toast('Não deu para usar o microfone. Libere no ícone do cadeado ao lado do endereço.', 'erro'); return;
+      // o microfone salvo não abriu: tenta o padrão e avisa
+      try { mic = await pedirMic(null); toast('O microfone salvo não abriu (' + esc(erroMic(e)) + '). Entrei com o padrão; troque no ⚙️.', 'aviso', 9000); }
+      catch (e2) { toast('Não deu para usar o microfone: ' + esc(erroMic(e2)) + '. Confira o cadeado ao lado do endereço.', 'erro', 9000); return; }
     }
+    mic.getAudioTracks()[0].onmute = mic.getAudioTracks()[0].onunmute = mostrarEmUso;
     ctxVoz = ctxVoz || new AudioContext();
     ctxVoz.resume().catch(() => {});
     mic.getAudioTracks().forEach(t => t.enabled = !mudo);
     pararMinhaFala = medirFala(mic, euId);
     emVoz = true;
     atualizarBotoesVoz(); enviarEstado(); renderLista();
-    medirNivel();
+    medirNivel(); mostrarEmUso();
     if (primeiraVez) {
       micId = mic.getAudioTracks()[0].getSettings().deviceId || 'default'; salvar('micId', micId);
       await listarMics(); $('popMic').classList.remove('oculto');
