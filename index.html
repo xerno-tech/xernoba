@@ -151,6 +151,48 @@
   #chat { position:relative; }
   #chat.soltando::after { content:"Solte para enviar a imagem"; position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
                           background:rgba(47,191,113,.15); border:2px dashed var(--acc); color:var(--txt); font-size:14px; z-index:5; }
+  .msg { position:relative; border-radius:6px; padding:2px 4px; margin:0 -4px; }
+  .msg:not(.sis):hover { background:rgba(255,255,255,.035); }
+  .msg.mencao { background:rgba(255,179,71,.10); box-shadow:inset 3px 0 0 var(--aviso); }
+  .msg.piscar { animation:piscar 1.2s; }
+  @keyframes piscar { 0%,60% { background:rgba(47,191,113,.25); } 100% { background:transparent; } }
+  .msg .arroba { background:rgba(110,231,168,.15); color:#9df3c4; border-radius:4px; padding:0 3px; font-weight:600; }
+  .msg .arroba.eu { background:rgba(255,179,71,.22); color:#ffd08a; }
+  .msg .acoesMsg { position:absolute; top:-12px; right:2px; display:none; gap:2px; background:var(--panel3); border:1px solid var(--linha);
+                   border-radius:8px; padding:2px; z-index:3; box-shadow:0 4px 12px rgba(0,0,0,.4); }
+  .msg:hover .acoesMsg, .msg .acoesMsg.aberto { display:flex; }
+  .msg .acoesMsg button { padding:3px 6px; font-size:13px; line-height:1; background:none; border:0; }
+  .msg .acoesMsg button:hover { background:var(--panel2); }
+  .msg .paletaMsg { position:absolute; top:16px; right:2px; display:flex; gap:2px; background:var(--panel3); border:1px solid var(--linha);
+                    border-radius:8px; padding:3px; z-index:4; box-shadow:0 6px 16px rgba(0,0,0,.45); }
+  .msg .paletaMsg button { padding:3px 5px; font-size:16px; background:none; border:0; }
+  .msg .paletaMsg button:hover { background:var(--panel2); transform:scale(1.15); }
+  .msg .citacao { display:block; font-size:.82em; color:var(--mut); border-left:2px solid var(--linha); padding-left:7px; margin:0 0 2px 2px;
+                  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:pointer; }
+  .msg .citacao:hover { color:var(--txt); }
+  .msg .citacao b { color:var(--txt); font-weight:600; }
+  .msg .chips { display:flex; flex-wrap:wrap; gap:4px; margin-top:3px; }
+  .msg .chips button { padding:1px 7px; font-size:.8em; border-radius:999px; background:var(--panel2); border:1px solid var(--linha); color:var(--txt); }
+  .msg .chips button.meu { border-color:var(--acc); background:rgba(47,191,113,.15); }
+  #barraResposta { display:flex; align-items:center; gap:8px; padding:6px 12px; font-size:12px; color:var(--mut); border-top:1px solid var(--linha); background:var(--panel2); }
+  #barraResposta span { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #barraResposta b { color:var(--txt); }
+  #barraResposta button { padding:2px 7px; }
+  #popMencao { position:absolute; left:10px; right:10px; bottom:58px; z-index:6; background:var(--panel3); border:1px solid var(--linha); border-radius:10px;
+               padding:4px; display:flex; flex-direction:column; box-shadow:0 10px 26px rgba(0,0,0,.5); max-height:220px; overflow-y:auto; }
+  #popMencao button { display:flex; align-items:center; gap:8px; text-align:left; background:none; border:0; padding:6px 8px; font-size:14px; border-radius:7px; }
+  #popMencao button.sel, #popMencao button:hover { background:var(--panel2); }
+  #popMencao .avatar { width:22px; height:22px; font-size:11px; }
+  .miniatura { display:block; margin:0 8px 8px 48px; width:min(180px, calc(100% - 56px)); aspect-ratio:16/9; object-fit:cover; border-radius:7px;
+               border:1px solid var(--linha); background:#000; cursor:pointer; }
+  .miniatura:hover { border-color:var(--live); }
+  .avatar.ausente { opacity:.5; filter:grayscale(.6); }
+  .espectadores { position:absolute; top:10px; right:10px; z-index:2; display:flex; align-items:center; gap:4px; background:rgba(10,10,14,.75);
+                  border:1px solid rgba(255,255,255,.12); border-radius:999px; padding:3px 9px 3px 4px; font-size:12px; pointer-events:auto; }
+  .espectadores .avatar { width:22px; height:22px; font-size:11px; margin-left:-6px; border:2px solid #111; }
+  .espectadores .avatar:first-of-type { margin-left:0; }
+  #faixaMini .espectadores, body.limpo .espectadores { display:none; }
+  #pilula { cursor:pointer; }
   .msg a { color:#6ee7a8; text-decoration:underline; word-break:break-all; }
   .previa { display:flex; gap:10px; margin-top:6px; padding:8px 10px; background:var(--panel2); border:1px solid var(--linha);
             border-left:3px solid var(--acc); border-radius:8px; text-decoration:none !important; color:var(--txt) !important; max-width:100%; }
@@ -333,6 +375,8 @@
       <div id="chat">
         <h2>Chat</h2>
         <div id="msgs"></div>
+        <div id="popMencao" class="oculto"></div>
+        <div id="barraResposta" class="oculto"><span id="txtResposta"></span><button class="link" id="btnCancResp" title="Cancelar">✕</button></div>
         <form id="formChat" autocomplete="off">
           <button type="button" class="sec icone" id="btnAnexo" title="Enviar imagem ou GIF do PC">📎</button>
           <input type="text" id="inChat" maxlength="300" placeholder="Mensagem, ou cole uma imagem…">
@@ -500,7 +544,7 @@
 <script>
 const $ = id => document.getElementById(id);
 // Versão desta página. Sobe a cada atualização; quem estiver com uma mais antiga recebe o aviso.
-const VERSAO = 8;
+const VERSAO = 9;
 async function conferirVersao() {
   try {
     const txt = await fetch(location.pathname + '?v=' + Date.now(), { cache: 'no-store' }).then(r => r.text());
@@ -616,6 +660,7 @@ function imagemValida(x) {
   if (x.startsWith('data:')) return /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(x) && x.length < 4.2e6;
   return HOSTS_IMG.test(x) && x.length < 600;
 }
+const REACOES_MSG = ['👍', '😂', '❤️', '🔥', '😮', '😢'];
 const REACOES = ['😂', '🔥', '😱', '👏', '❤️', '💀'];
 function entrar(nome, sala) {
   $('entrada').classList.add('oculto'); $('sala').classList.remove('oculto');
@@ -625,6 +670,8 @@ function entrar(nome, sala) {
   const HUB = 'telinha-hub-' + sala;
 
   let peer = null, hubPeer = null, hubConn = null, euId = null, saindo = false, avisoDoHub = null;
+  let ausente = false;
+  const miniaturasRec = new Map();   // miniaturas recebidas de quem está ao vivo
   let regrasSala = {}, senhaSala = null, bloqueado = false, silenciadoAdmin = false;
   let adminKey = ler('adminKey') || null;
   let stream = null, aoVivo = false;
@@ -638,6 +685,7 @@ function entrar(nome, sala) {
     hubPeer = new Peer(HUB);
     const roster = new Map(), conns = new Map();
     const historico = [];
+    const miniaturas = new Map();   // quem está ao vivo -> última miniatura
     // regras da sala: herdadas do último hub, para não sumirem quando o hub muda
     const banidos = new Set(regrasSala.banidos || []);
     const nomesBanidos = Object.assign({}, regrasSala.nomesBanidos || {});   // cid -> nome, para a lista do admin
@@ -667,7 +715,7 @@ function entrar(nome, sala) {
       conns.delete(id); vistoEm.delete(id);
       const m = roster.get(id);
       if (!m) return;
-      roster.delete(id); difundir();
+      roster.delete(id); miniaturas.delete(id); difundir();
       if (m._expulso) return;
       if (deVerdade || !m.cid) { registrar(`${m.nome} saiu da sala`, null, null, 'saiu', id); return; }
       clearTimeout(pendentes.get(m.cid));
@@ -675,10 +723,11 @@ function entrar(nome, sala) {
     }
     const vistoEm = new Map();
     // evento: entrou/saiu/live/voz/nome/msg — usado para os sons; alvo: quem o evento envolve
-    const registrar = (texto, nomeAutor, idAutor, evento, alvo, cor, img) => {
+    const registrar = (texto, nomeAutor, idAutor, evento, alvo, cor, img, extra) => {
       if (saindo) return;   // a página está fechando: as conexões caindo não são saídas de verdade
       const msg = { tipo: 'msg', uid: Math.random().toString(36).slice(2) + Date.now().toString(36), ts: Date.now(), texto,
-                    nome: nomeAutor || null, id: idAutor || null, evento: evento || (nomeAutor ? 'msg' : null), alvo: alvo || idAutor || null, cor: cor || null, img: img || null };
+                    nome: nomeAutor || null, id: idAutor || null, evento: evento || (nomeAutor ? 'msg' : null), alvo: alvo || idAutor || null, cor: cor || null, img: img || null,
+                    ...(extra || {}) };
       historico.push(msg); if (historico.length > 60) historico.shift();
       // o histórico guarda só as 8 imagens mais recentes, para não pesar em quem entra
       const comImg = historico.filter(x => x.img && x.img.startsWith('data:'));
@@ -716,6 +765,7 @@ function entrar(nome, sala) {
           }
           const admin = !!(ADMIN_HASH && d.adminKey && await sha256(String(d.adminKey)) === ADMIN_HASH);
           const m = { id: c.peer, cid: ccid, nome: String(d.nome).slice(0, 24), live: !!d.live, voz: !!d.voz, mudo: !!d.mudo || silenciados.has(ccid),
+                      ausente: !!d.ausente && !d.live,
                       silenciado: silenciados.has(ccid), admin,
                       foto: d.usarFoto && disc && disc.id && disc.avatar ? `https://cdn.discordapp.com/avatars/${disc.id}/${disc.avatar}.png?size=64` : null,
                       cor: /^#[0-9a-f]{6}$/i.test(d.cor || '') ? d.cor : null, emoji: d.emoji ? String(d.emoji).slice(0, 8) : null };
@@ -723,6 +773,7 @@ function entrar(nome, sala) {
           if (admin && !(antes && antes.admin)) registrar(`${m.nome} agora é admin 🛡️`, null, null, 'nome', c.peer);
           if (!antes) {
             try { c.send({ tipo: 'historico', msgs: historico }); } catch (e) {}
+            for (const [tid, img] of miniaturas) if (roster.has(tid)) try { c.send({ tipo: 'thumb', id: tid, img }); } catch (e) {}
             // quem só está se reconectando a um hub novo não é anunciado de novo
             // a mesma pessoa (mesmo navegador) voltando: tira a entrada antiga, sem anunciar nada
             let mesma = false;
@@ -738,7 +789,22 @@ function entrar(nome, sala) {
             if (antes.live !== m.live) registrar(m.live ? `${m.nome} começou a transmitir` : `${m.nome} parou de transmitir`, null, null, m.live ? 'live' : 'fimLive', c.peer);
             if (antes.voz !== m.voz) registrar(m.voz ? `${m.nome} entrou na voz` : `${m.nome} saiu da voz`, null, null, 'voz', c.peer);
           }
+          if (!m.live) miniaturas.delete(c.peer);
           difundir();
+        } else if (d.tipo === 'thumb') {
+          const m = roster.get(c.peer);
+          if (!m || !m.live || typeof d.img !== 'string' || !/^data:image\/(jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(d.img) || d.img.length > 40000) return;
+          miniaturas.set(c.peer, d.img);
+          for (const x of conns.values()) if (x.open) try { x.send({ tipo: 'thumb', id: c.peer, img: d.img }); } catch (e) {}
+        } else if (d.tipo === 'reagirMsg') {
+          const m = roster.get(c.peer); const alvo = historico.find(x => x.uid === d.uid);
+          if (!m || !alvo || !alvo.nome || !REACOES_MSG.includes(d.emoji)) return;
+          alvo.reacoes = alvo.reacoes || {};
+          const lista = alvo.reacoes[d.emoji] || [];
+          const i = lista.findIndex(x => x.cid === m.cid);
+          if (i >= 0) lista.splice(i, 1); else lista.push({ cid: m.cid, nome: m.nome });
+          if (lista.length) alvo.reacoes[d.emoji] = lista; else delete alvo.reacoes[d.emoji];
+          for (const x of conns.values()) if (x.open) try { x.send({ tipo: 'reacoesMsg', uid: alvo.uid, reacoes: alvo.reacoes }); } catch (e) {}
         } else if (d.tipo === 'acao') {
           const adm = roster.get(c.peer);
           if (!adm || !adm.admin) return;   // só admin manda
@@ -793,7 +859,10 @@ function entrar(nome, sala) {
           const texto = String(d.texto || '').trim().slice(0, 300);
           const img = imagemValida(d.img) ? d.img : null;
           if (!texto && !img) return;
-          registrar(texto, m.nome, c.peer, 'msg', c.peer, m.cor, img);
+          // resposta: guarda um trechinho da mensagem original
+          const orig = d.resp && historico.find(x => x.uid === d.resp && x.nome);
+          const resp = orig ? { uid: orig.uid, nome: orig.nome, trecho: (orig.texto || (orig.img ? '🖼️ imagem' : '')).slice(0, 90) } : null;
+          registrar(texto, m.nome, c.peer, 'msg', c.peer, m.cor, img, resp ? { resp } : null);
         }
       });
       const sair = () => sairDe(c.peer);
@@ -812,7 +881,9 @@ function entrar(nome, sala) {
     hubConn.on('open', enviarEstado);
     hubConn.on('data', d => {
       if (!d) return;
-      if (d.tipo === 'lista') { membros = d.membros; if (d.regras) regrasSala = d.regras; renderLista(); atualizarAdminUI(); }
+      if (d.tipo === 'lista') { membros = d.membros; if (d.regras) regrasSala = d.regras; renderLista(); atualizarAdminUI(); atualizarEspectadores(); }
+      else if (d.tipo === 'thumb') { miniaturasRec.set(d.id, d.img); const im = document.querySelector(`img.miniatura[data-thumb="${CSS.escape(d.id)}"]`); if (im) im.src = d.img; else renderLista(); }
+      else if (d.tipo === 'reacoesMsg') { atualizarChips(d.uid, d.reacoes); }
       else if (d.tipo === 'reacao') { mostrarReacao(d); }
       else if (d.tipo === 'risco') { receberRisco(d); }
       else if (d.tipo === 'expulso') { bloquear('expulso'); }
@@ -832,7 +903,7 @@ function entrar(nome, sala) {
   let jaEntrei = false;
   function enviarEstado() {
     if (!hubConn || !hubConn.open) return;
-    hubConn.send({ tipo: 'estado', nome, live: aoVivo, voz: emVoz, mudo: emVoz && mudo, cor: perfil.cor, emoji: perfil.emoji, voltando: jaEntrei,
+    hubConn.send({ tipo: 'estado', nome, live: aoVivo, voz: emVoz, mudo: emVoz && mudo, cor: perfil.cor, emoji: perfil.emoji, voltando: jaEntrei, ausente,
                    cid, senha: senhaSala, adminKey, token: tokenLogin, usarFoto: perfil.foto });
     jaEntrei = true;
   }
@@ -849,8 +920,8 @@ function entrar(nome, sala) {
       const eu = m.id === euId;
       const div = document.createElement('div');
       div.className = 'membro';
-      const status = m.live ? 'Ao vivo' : m.voz ? (m.mudo ? 'Na voz · mudo' : 'Na voz') : 'Assistindo';
-      div.innerHTML = `${avatarHTML(m, m.live ? 'live' : '')}
+      const status = m.live ? 'Ao vivo' : m.ausente ? '🌙 Ausente' : m.voz ? (m.mudo ? 'Na voz · mudo' : 'Na voz') : 'Assistindo';
+      div.innerHTML = `${avatarHTML(m, (m.live ? 'live' : '') + (m.ausente ? ' ausente' : ''))}
         <div class="info"><span class="n">${esc(m.nome)}${m.admin ? '<span class="escudo" title="Admin">🛡️</span>' : ''}${eu ? ' <span class="mut">(você)</span>' : ''}</span>
         <span class="s ${m.live ? 'live' : ''}">${status}</span></div>
         ${m.voz ? `<span class="voz" title="${m.mudo ? 'Mudo' : 'Na voz'}">${m.mudo ? '🔇' : '🎙️'}</span>` : ''}`;
@@ -894,7 +965,15 @@ function entrar(nome, sala) {
         }
       }
       el.appendChild(div);
+      // miniatura ao vivo (atualiza a cada 30 s); clicar abre a transmissão
+      if (m.live && !eu && miniaturasRec.has(m.id) && !assistindo.has(m.id)) {
+        const im = document.createElement('img'); im.className = 'miniatura'; im.dataset.thumb = m.id; im.src = miniaturasRec.get(m.id);
+        im.alt = 'Prévia da tela de ' + m.nome; im.title = assistindo.has(m.id) ? 'Você já está assistindo' : 'Clique para assistir';
+        im.onclick = () => { if (!assistindo.has(m.id)) assistir(m); };
+        el.appendChild(im);
+      }
     }
+    for (const id of [...miniaturasRec.keys()]) if (!membros.some(m => m.id === id && m.live)) miniaturasRec.delete(id);
     for (const id of [...assistindo.keys()]) if (!membros.some(m => m.id === id && m.live)) pararDeAssistir(id);
     sincronizarVoz();
   }
@@ -1433,6 +1512,17 @@ function entrar(nome, sala) {
     toast(`🎬 Clipe salvo (cerca de ${seg} s) na pasta de downloads.`);
   }
 
+  /* =================== AUSENTE (10 min sem mexer) =================== */
+  let ultimaAtividade = Date.now();
+  const mexeu = () => { ultimaAtividade = Date.now(); if (ausente) { ausente = false; enviarEstado(); } };
+  for (const ev of ['pointermove', 'pointerdown', 'keydown', 'wheel', 'touchstart']) addEventListener(ev, mexeu, { passive: true });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) mexeu(); });
+  setInterval(() => {
+    if (falandoDesde && falandoDesde.has(euId)) ultimaAtividade = Date.now();   // falar na voz conta como presença
+    const agora = !aoVivo && Date.now() - ultimaAtividade > 10 * 60000;
+    if (agora !== ausente) { ausente = agora; enviarEstado(); }
+  }, 20000);
+
   /* =================== REAÇÕES =================== */
   function mostrarReacao(d) {
     const tela = d.alvo === euId ? telaLocal : (assistindo.get(d.alvo) || {}).tela;
@@ -1467,7 +1557,7 @@ function entrar(nome, sala) {
   let volSom = Number(ler('volSom') || '0.5');
   let notif = ler('notif') === '1';
   let ctxSom = null;
-  const NOTAS = { entrou: [660, 880], saiu: [660, 440], msg: [988], live: [523, 659, 784], voz: [740, 988], teste: [523, 784] };
+  const NOTAS = { entrou: [660, 880], saiu: [660, 440], msg: [988], live: [523, 659, 784], voz: [740, 988], teste: [523, 784], mencao: [1047, 784, 1047, 1319] };
   function tocar(tipo) {
     if (volSom <= 0) return;
     try {
@@ -1487,6 +1577,13 @@ function entrar(nome, sala) {
     } catch (e) {}
   }
   const GRUPO = { entrou: 'sala', saiu: 'sala', msg: 'msg', live: 'live', voz: 'voz' };
+  // menção: toca sempre (a não ser que o volume esteja no zero) e avisa no Windows se a aba estiver escondida
+  function avisarMencao(m) {
+    tocar('mencao');
+    if (notif && document.hidden && 'Notification' in window && Notification.permission === 'granted') {
+      try { const n = new Notification(m.nome + ' te mencionou', { body: m.texto, tag: 'midori-mencao', silent: true }); n.onclick = () => { window.focus(); n.close(); }; } catch (e) {}
+    }
+  }
   function avisarEvento(m) {
     const grupo = GRUPO[m.evento];
     if (!grupo || m.alvo === euId) return;   // não toca para as suas próprias ações
@@ -1667,34 +1764,113 @@ function entrar(nome, sala) {
     }
     return a;
   }
-  // texto com links clicáveis (montado elemento por elemento, nunca como HTML)
+  // texto com links clicáveis e @menções (montado elemento por elemento, nunca como HTML)
   function preencherComLinks(el, texto) {
     const re = /\bhttps?:\/\/[^\s<>"']+/gi;
     let ult = 0, m;
     while ((m = re.exec(texto))) {
       let url = m[0].replace(/[.,!?;:)\]]+$/, '');   // tira pontuação grudada no fim
-      if (m.index > ult) el.append(texto.slice(ult, m.index));
+      if (m.index > ult) marcarMencoes(el, texto.slice(ult, m.index));
       const a = document.createElement('a');
       a.href = url; a.textContent = url; a.target = '_blank'; a.rel = 'noopener noreferrer';
       el.append(a);
       ult = m.index + url.length; re.lastIndex = ult;
     }
-    if (ult < texto.length) el.append(texto.slice(ult));
+    if (ult < texto.length) marcarMencoes(el, texto.slice(ult));
   }
+  // ---- menções ----
+  const nomesSala = () => [...new Set([nome, ...membros.map(m => m.nome)])].sort((a, b) => b.length - a.length);
+  const mencionaMe = m => {
+    if (!m.nome || m.id === euId) return false;
+    const t = ' ' + (m.texto || '').toLowerCase() + ' ';
+    return t.includes('@todos') || t.includes('@' + nome.toLowerCase());
+  };
+  // marca @Nome e @todos dentro de um pedaço de texto
+  function marcarMencoes(el, texto) {
+    const nomes = nomesSala();
+    let i = 0, buf = '';
+    while (i < texto.length) {
+      if (texto[i] === '@') {
+        const resto = texto.slice(i + 1).toLowerCase();
+        const achado = ['todos', ...nomes].find(n => resto.startsWith(n.toLowerCase()) && !/[\p{L}\p{N}]/u.test(resto.charAt(n.length) || ' '));
+        if (achado) {
+          if (buf) { el.append(buf); buf = ''; }
+          const sp = document.createElement('span'); sp.className = 'arroba' + (achado === nome || achado === 'todos' ? ' eu' : '');
+          sp.textContent = '@' + texto.slice(i + 1, i + 1 + achado.length);
+          el.append(sp); i += achado.length + 1; continue;
+        }
+      }
+      buf += texto[i]; i++;
+    }
+    if (buf) el.append(buf);
+  }
+  // ---- reações nas mensagens ----
+  function atualizarChips(uid, reacoes) {
+    const div = document.querySelector(`#msgs .msg[data-uid="${CSS.escape(uid)}"]`); if (!div) return;
+    let ch = div.querySelector('.chips');
+    const itens = Object.entries(reacoes || {}).filter(([, l]) => l.length);
+    if (!itens.length) { if (ch) ch.remove(); return; }
+    if (!ch) { ch = document.createElement('div'); ch.className = 'chips'; div.appendChild(ch); }
+    ch.innerHTML = '';
+    for (const [emoji, lista] of itens) {
+      const b = document.createElement('button');
+      b.textContent = `${emoji} ${lista.length}`;
+      b.title = lista.map(x => x.nome).join(', ');
+      if (lista.some(x => x.cid === cid)) b.className = 'meu';
+      b.onclick = () => reagirMsg(uid, emoji);
+      ch.appendChild(b);
+    }
+    const box = $('msgs'); if (box.scrollHeight - box.scrollTop - box.clientHeight < 60) box.scrollTop = box.scrollHeight;
+  }
+  function reagirMsg(uid, emoji) { if (hubConn && hubConn.open) hubConn.send({ tipo: 'reagirMsg', uid, emoji }); }
+  // ---- responder ----
+  let respondendo = null;
+  function responder(m) {
+    respondendo = m.uid;
+    $('txtResposta').innerHTML = '';
+    $('txtResposta').append('↩ Respondendo a ', Object.assign(document.createElement('b'), { textContent: m.nome }), ': ' + ((m.texto || (m.img ? '🖼️ imagem' : '')).slice(0, 80)));
+    $('barraResposta').classList.remove('oculto');
+    $('inChat').focus();
+  }
+  function cancelarResposta() { respondendo = null; $('barraResposta').classList.add('oculto'); }
+  $('btnCancResp').onclick = cancelarResposta;
+
   function addMsg(m, doHistorico) {
     if (!m || !m.uid || vistas.has(m.uid)) return;   // evita repetir quando o hub muda
     vistas.add(m.uid);
-    if (!doHistorico) avisarEvento(m);
+    const meChamaram = mencionaMe(m);
+    if (!doHistorico) { if (meChamaram) avisarMencao(m); else avisarEvento(m); }
     const box = $('msgs');
     const noFim = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
     const div = document.createElement('div');
     const h = document.createElement('span'); h.className = 'hora'; h.textContent = hora(m.ts);
+    div.dataset.uid = m.uid;
     if (!m.nome) { div.className = 'msg sis'; const t = document.createElement('span'); t.textContent = m.texto; div.append(h, t); }
     else {
-      div.className = 'msg';
+      div.className = 'msg' + (meChamaram ? ' mencao' : '');
+      if (m.resp && m.resp.uid) {
+        const c = document.createElement('span'); c.className = 'citacao'; c.title = 'Ir para a mensagem';
+        c.append('↩ ', Object.assign(document.createElement('b'), { textContent: m.resp.nome }), ' ' + (m.resp.trecho || ''));
+        c.onclick = () => { const o = document.querySelector(`#msgs .msg[data-uid="${CSS.escape(m.resp.uid)}"]`);
+          if (o) { o.scrollIntoView({ block: 'center', behavior: 'smooth' }); o.classList.remove('piscar'); void o.offsetWidth; o.classList.add('piscar'); } };
+        div.appendChild(c);
+      }
       const q = document.createElement('span'); q.className = 'quem'; q.style.color = m.cor ? clarear(m.cor) : corDe(m.nome).replace('45%', '68%'); q.textContent = m.nome;
       const t = document.createElement('span'); preencherComLinks(t, m.texto || '');
       div.append(h, q, t);
+      // botões que aparecem ao passar o mouse: responder e reagir
+      const acoes = document.createElement('div'); acoes.className = 'acoesMsg';
+      const bR = document.createElement('button'); bR.textContent = '↩'; bR.title = 'Responder'; bR.onclick = e => { e.stopPropagation(); responder(m); };
+      const bE = document.createElement('button'); bE.textContent = '😀'; bE.title = 'Reagir';
+      bE.onclick = e => {
+        e.stopPropagation();
+        document.querySelectorAll('.paletaMsg').forEach(x => x.remove());
+        document.querySelectorAll('.acoesMsg.aberto').forEach(x => x.classList.remove('aberto'));
+        const pal = document.createElement('div'); pal.className = 'paletaMsg';
+        for (const emo of REACOES_MSG) { const b = document.createElement('button'); b.textContent = emo; b.onclick = ev => { ev.stopPropagation(); reagirMsg(m.uid, emo); pal.remove(); acoes.classList.remove('aberto'); }; pal.appendChild(b); }
+        div.appendChild(pal); acoes.classList.add('aberto');
+      };
+      acoes.append(bR, bE); div.appendChild(acoes);
       // link sozinho de GIF/imagem vira imagem
       const soLink = !m.img && imagemValida((m.texto || '').trim()) && !m.texto.trim().startsWith('data:') ? m.texto.trim() : null;
       const src = imagemValida(m.img) ? m.img : soLink;
@@ -1711,6 +1887,7 @@ function entrar(nome, sala) {
       }
     }
     box.appendChild(div);
+    if (m.reacoes) atualizarChips(m.uid, m.reacoes);
     while (box.children.length > 200) box.firstChild.remove();
     if (noFim || m.id === euId) box.scrollTop = box.scrollHeight;
     if (document.hidden && m.nome && m.id !== euId) { naoLidas++; document.title = `(${naoLidas}) Midori Xernoba · ${sala}`; }
@@ -1739,9 +1916,53 @@ function entrar(nome, sala) {
   }
   function enviarChat(texto, img) {
     if (!hubConn || !hubConn.open) { toast('Ainda conectando à sala… tente de novo em instantes.', 'aviso'); return false; }
-    hubConn.send({ tipo: 'chat', texto: (texto || '').slice(0, 300), img: img || null });
+    hubConn.send({ tipo: 'chat', texto: (texto || '').slice(0, 300), img: img || null, resp: respondendo });
+    cancelarResposta();
     return true;
   }
+  document.addEventListener('click', () => { document.querySelectorAll('.paletaMsg').forEach(x => x.remove()); document.querySelectorAll('.acoesMsg.aberto').forEach(x => x.classList.remove('aberto')); });
+
+  // ---- lista de nomes ao digitar @ ----
+  let opcoesMencao = [], selMencao = 0;
+  function tokenArroba() {
+    const inp = $('inChat'), antes = inp.value.slice(0, inp.selectionStart);
+    const mm = antes.match(/(^|\s)@([^@]{0,24})$/);
+    return mm ? { ini: antes.length - mm[2].length - 1, busca: mm[2].toLowerCase() } : null;
+  }
+  function mostrarMencoes() {
+    const tk = tokenArroba(), pop = $('popMencao');
+    if (!tk) { pop.classList.add('oculto'); opcoesMencao = []; return; }
+    const todos = [{ nome: 'todos', id: '' }, ...membros.filter(m => m.id !== euId)];
+    opcoesMencao = todos.filter(m => m.nome.toLowerCase().startsWith(tk.busca)).slice(0, 8);
+    if (!opcoesMencao.length) { pop.classList.add('oculto'); return; }
+    selMencao = Math.min(selMencao, opcoesMencao.length - 1);
+    pop.innerHTML = '';
+    opcoesMencao.forEach((m, i) => {
+      const b = document.createElement('button'); b.type = 'button'; if (i === selMencao) b.className = 'sel';
+      b.innerHTML = m.id ? avatarHTML(m) : '<span style="width:22px;text-align:center">📣</span>';
+      b.append(m.id ? m.nome : 'todos (chama a sala inteira)');
+      b.onmousedown = e => { e.preventDefault(); escolherMencao(i); };
+      pop.appendChild(b);
+    });
+    pop.classList.remove('oculto');
+  }
+  function escolherMencao(i) {
+    const tk = tokenArroba(), m = opcoesMencao[i]; if (!tk || !m) return;
+    const inp = $('inChat'), fim = inp.selectionStart;
+    inp.value = inp.value.slice(0, tk.ini) + '@' + m.nome + ' ' + inp.value.slice(fim);
+    const pos = tk.ini + m.nome.length + 2; inp.setSelectionRange(pos, pos);
+    $('popMencao').classList.add('oculto'); opcoesMencao = [];
+  }
+  $('inChat').addEventListener('input', () => { selMencao = 0; mostrarMencoes(); });
+  $('inChat').addEventListener('keydown', e => {
+    if (opcoesMencao.length && !$('popMencao').classList.contains('oculto')) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); selMencao = (selMencao + (e.key === 'ArrowDown' ? 1 : -1) + opcoesMencao.length) % opcoesMencao.length; mostrarMencoes(); return; }
+      if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); escolherMencao(selMencao); return; }
+      if (e.key === 'Escape') { $('popMencao').classList.add('oculto'); opcoesMencao = []; return; }
+    }
+    if (e.key === 'Escape' && respondendo) cancelarResposta();
+  });
+  $('inChat').addEventListener('blur', () => setTimeout(() => $('popMencao').classList.add('oculto'), 150));
   async function enviarArquivo(f) {
     const d = await prepararImagem(f);
     if (d && enviarChat($('inChat').value.trim(), d)) $('inChat').value = '';
@@ -1932,7 +2153,36 @@ function entrar(nome, sala) {
     const n = assistentes.size;
     $('pilula').textContent = `AO VIVO · ${n} assistindo`;
     atualizarSom();
+    atualizarEspectadores();
   }
+  // quem está assistindo a sua tela: fotos em cima da sua tela e nomes ao passar o mouse na pílula
+  function atualizarEspectadores() {
+    const quem = [...assistentes.keys()].map(id => membros.find(m => m.id === id)).filter(Boolean);
+    const nomes = quem.map(m => m.nome).join(', ');
+    $('pilula').title = quem.length ? 'Assistindo: ' + nomes : 'Ninguém assistindo ainda';
+    if (!telaLocal) return;
+    let box = telaLocal.querySelector('.espectadores');
+    if (!quem.length) { if (box) box.remove(); return; }
+    if (!box) { box = document.createElement('div'); box.className = 'espectadores'; telaLocal.appendChild(box); }
+    box.title = 'Assistindo: ' + nomes;
+    box.innerHTML = '👀 ' + quem.slice(0, 5).map(m => avatarHTML(m)).join('') + `<span>${quem.length}</span>`;
+  }
+  $('pilula').onclick = () => {
+    const quem = [...assistentes.keys()].map(id => membros.find(m => m.id === id)).filter(Boolean);
+    toast(quem.length ? '👀 Assistindo você: <b>' + quem.map(m => esc(m.nome)).join(', ') + '</b>' : 'Ninguém está assistindo ainda.', '', 5000);
+  };
+  // miniatura da sua tela para a lista dos outros (a cada 30 s)
+  function enviarMiniatura() {
+    if (!aoVivo || !telaLocal || !hubConn || !hubConn.open) return;
+    const v = telaLocal.querySelector('video'); if (!v.videoWidth) return;
+    const cv = document.createElement('canvas'); cv.width = 240; cv.height = 135;
+    const g = cv.getContext('2d'); g.fillStyle = '#000'; g.fillRect(0, 0, 240, 135);
+    const k = Math.min(240 / v.videoWidth, 135 / v.videoHeight), w = v.videoWidth * k, h = v.videoHeight * k;
+    g.drawImage(v, (240 - w) / 2, (135 - h) / 2, w, h);
+    const img = cv.toDataURL('image/jpeg', 0.6);
+    if (img.length < 40000) hubConn.send({ tipo: 'thumb', img });
+  }
+  setInterval(enviarMiniatura, 30000);
 
   /* ---- Som: um botão só, em qualquer modo ---- */
   let semSomOk = false;   // a pessoa escolheu ficar sem som
@@ -1992,6 +2242,7 @@ function entrar(nome, sala) {
       atualizarAoVivo();
       enviarEstado();
       if (!faltaSom) toast('Você está <b>ao vivo</b>. Seus amigos já podem clicar em Assistir.');
+      setTimeout(enviarMiniatura, 2500);
       setTimeout(mostrarSaida, 1200);
     } catch (e) {
       if (e.name === 'NotAllowedError') return;   // cancelou a escolha
