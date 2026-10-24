@@ -31,7 +31,11 @@
   /* ---------- Entrada ---------- */
   #entrada { margin:auto; width:min(380px, calc(100% - 32px)); background:var(--panel); border:1px solid var(--linha);
              border-radius:16px; padding:26px; display:flex; flex-direction:column; gap:14px; }
-  #entrada h1 { margin:0; font-size:24px; }
+  #entrada h1, #portao h1 { margin:0; font-size:24px; }
+  #portao { margin:auto; width:min(380px, calc(100% - 32px)); background:var(--panel); border:1px solid var(--linha);
+            border-radius:16px; padding:26px; display:flex; flex-direction:column; gap:14px; }
+  #portao p { margin:-6px 0 4px; font-size:13px; color:var(--mut); }
+  #btnDiscord { background:#5865f2; } #btnDiscord:hover { background:#4752c4; }
   #entrada p { margin:-6px 0 4px; font-size:13px; color:var(--mut); }
   .campo { display:flex; flex-direction:column; gap:6px; font-size:13px; color:var(--mut); }
 
@@ -215,12 +219,22 @@
 <div id="toasts"></div>
 
 <!-- ================= ENTRADA ================= -->
-<div id="entrada">
+<div id="portao" class="oculto">
+  <h1>🍃 Midori Xernoba</h1>
+  <p>Espaço fechado do grupo, só para adultos.</p>
+  <label class="marcar" style="color:var(--txt)"><input type="checkbox" id="chk18"> Tenho 18 anos ou mais</label>
+  <button id="btnDiscord" class="oculto" disabled>Entrar com Discord</button>
+  <button id="btnSo18" class="oculto" disabled>Continuar</button>
+  <span class="mut" id="msgPortao" style="font-size:13px"></span>
+</div>
+
+<div id="entrada" class="oculto">
   <h1>🍃 Midori Xernoba</h1>
   <p>Transmita seu jogo para os amigos, direto do navegador.</p>
   <label class="campo">Seu nome <input type="text" id="inNome" maxlength="24" placeholder="Ex.: Xernoba" autocomplete="nickname"></label>
   <label class="campo">Sala <input type="text" id="inSala" maxlength="32" placeholder="Ex.: galera-x7k2"></label>
   <button id="btnEntrar">Entrar na sala</button>
+  <span class="mut oculto" id="infoDiscord" style="font-size:12px"></span>
 </div>
 
 <!-- ================= SALA ================= -->
@@ -436,9 +450,48 @@ document.addEventListener('mousemove', () => {
 });
 atualizarOlho();
 
+/* ---------- Login com Discord + 18+ ---------- */
+// Endereço do servidor de login (Cloudflare Worker). Vazio = sem login (como antes).
+const LOGIN_URL = '';
+const lerToken = t => { try { return JSON.parse(atob(t.split('.')[0].replace(/-/g, '+').replace(/_/g, '/'))); } catch (e) { return null; } };
+(function lerRetornoLogin() {
+  const h = new URLSearchParams(location.hash.slice(1));
+  if (h.get('token')) salvar('token', h.get('token'));
+  if (h.get('erro')) salvar('erroLogin', h.get('erro'));
+  if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+})();
+let tokenLogin = ler('token') || null;
+const dadosLogin = () => { const d = tokenLogin && lerToken(tokenLogin); return d && d.exp > Date.now() ? d : null; };
+const ERROS_LOGIN = {
+  fora: 'Sua conta do Discord não está no servidor do grupo.',
+  cancelado: 'Você cancelou o login no Discord.',
+  estado: 'O login demorou demais. Tente de novo.',
+  discord: 'O Discord não respondeu. Tente de novo.',
+  sessao: 'Seu login venceu. Entre de novo.'
+};
+function mostrarPortao() {
+  const precisaLogin = !!LOGIN_URL && !dadosLogin();
+  const precisa18 = ler('maior18') !== '1';
+  if (!precisaLogin && !precisa18) return false;
+  $('entrada').classList.add('oculto'); $('portao').classList.remove('oculto');
+  $('chk18').checked = !precisa18;
+  $('btnDiscord').classList.toggle('oculto', !precisaLogin);
+  $('btnSo18').classList.toggle('oculto', precisaLogin);
+  const err = ler('erroLogin'); salvar('erroLogin', '');
+  $('msgPortao').textContent = err ? (ERROS_LOGIN[err] || 'Não deu para entrar.') : (precisaLogin ? 'Só entra quem está no servidor do Discord do grupo.' : '');
+  const atualizar = () => { $('btnDiscord').disabled = $('btnSo18').disabled = !$('chk18').checked; };
+  $('chk18').onchange = atualizar; atualizar();
+  return true;
+}
+$('btnDiscord').onclick = () => { salvar('maior18', '1'); location.href = LOGIN_URL + '/login'; };
+$('btnSo18').onclick = () => { salvar('maior18', '1'); $('portao').classList.add('oculto'); $('entrada').classList.remove('oculto'); };
+const bloqueadoPeloPortao = mostrarPortao();
+if (!bloqueadoPeloPortao) $('entrada').classList.remove('oculto');
+if (dadosLogin()) { $('infoDiscord').textContent = '✅ Conectado pelo Discord como ' + dadosLogin().nome; $('infoDiscord').classList.remove('oculto'); }
+
 /* ---------- Entrada ---------- */
 const params = new URLSearchParams(location.search);
-$('inNome').value = ler('nome') || '';
+$('inNome').value = ler('nome') || (dadosLogin() ? dadosLogin().nome.slice(0, 24) : '');
 $('inSala').value = params.get('sala') || ler('sala') || '';
 $('btnEntrar').onclick = () => {
   const nome = $('inNome').value.trim().slice(0, 24);
@@ -493,6 +546,19 @@ function entrar(nome, sala) {
     let senhaHash = regrasSala.senhaHash || null;
     // quem já pode estar na sala com senha (estava dentro quando a senha foi posta, ou acertou a senha)
     const autorizados = new Set(regrasSala.autorizados || []);
+    // pulseiras de login já conferidas (token -> validade)
+    const conferidas = new Map();
+    async function pulseiraValida(token) {
+      if (!LOGIN_URL) return true;
+      if (!token) return false;
+      const c = conferidas.get(token);
+      if (c && c > Date.now()) return true;
+      try {
+        const r = await fetch(LOGIN_URL + '/verificar', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token }) }).then(x => x.json());
+        if (r.ok) { conferidas.set(token, Math.min(r.exp, Date.now() + 30 * 60000)); return true; }
+      } catch (e) {}
+      return false;
+    }
     // saída "de verdade" (fechou a aba): anuncia na hora.
     // queda (aba adormecida, internet oscilou): só anuncia se a pessoa não voltar em 3 minutos.
     const pendentes = new Map();   // cid -> timer da saída ainda não anunciada
@@ -532,6 +598,9 @@ function entrar(nome, sala) {
         if (d.tipo === 'estado') {
           const antes = roster.get(c.peer);
           const ccid = String(d.cid || '').slice(0, 40);
+          if (!antes && !(await pulseiraValida(d.token))) {
+            c._fora = true; try { c.send({ tipo: 'semLogin' }); } catch (e) {} setTimeout(() => c.close(), 300); return;
+          }
           if (!antes) {
             // barra quem foi expulso ou não sabe a senha
             if (ccid && banidos.has(ccid)) { c._fora = true; try { c.send({ tipo: 'expulso' }); } catch (e) {} setTimeout(() => c.close(), 300); return; }
@@ -617,6 +686,7 @@ function entrar(nome, sala) {
       if (!d) return;
       if (d.tipo === 'lista') { membros = d.membros; if (d.regras) regrasSala = d.regras; renderLista(); atualizarAdminUI(); }
       else if (d.tipo === 'expulso') { bloquear('expulso'); }
+      else if (d.tipo === 'semLogin') { bloqueado = true; salvar('token', ''); salvar('erroLogin', 'sessao'); location.href = location.pathname; }
       else if (d.tipo === 'pedeSenha') { bloquear('senha', d.errada); }
       else if (d.tipo === 'silenciar') { aplicarSilencio(!!d.valor); }
       else if (d.tipo === 'parar') { if (aoVivo) { pararTransmissao(); toast('Um admin encerrou a sua transmissão.', 'aviso', 8000); } }
@@ -633,7 +703,7 @@ function entrar(nome, sala) {
   function enviarEstado() {
     if (!hubConn || !hubConn.open) return;
     hubConn.send({ tipo: 'estado', nome, live: aoVivo, voz: emVoz, mudo: emVoz && mudo, cor: perfil.cor, emoji: perfil.emoji, voltando: jaEntrei,
-                   cid, senha: senhaSala, adminKey });
+                   cid, senha: senhaSala, adminKey, token: tokenLogin });
     jaEntrei = true;
   }
   setInterval(enviarEstado, 5000);
@@ -1501,8 +1571,10 @@ function entrar(nome, sala) {
   peer.on('open', id => { euId = id; virarHub(); setTimeout(() => { if (!hubConn) conectarHub(); }, 800); });
 
   // alguém quer me assistir
+  const naSala = id => membros.some(m => m.id === id);   // lista que o organizador da sala já conferiu
   peer.on('connection', conn => {
     if (!conn.metadata || conn.metadata.tipo !== 'assistir') return;
+    if (!naSala(conn.peer)) { conn.on('open', () => conn.close()); return; }
     assistentes.set(conn.peer, { conn, call: null });
     conn.on('open', () => { enviarPara(conn.peer); atualizarAoVivo(); });
     const sair = () => { const a = assistentes.get(conn.peer); if (a && a.call) try { a.call.close(); } catch (e) {} assistentes.delete(conn.peer); atualizarAoVivo(); };
@@ -1512,6 +1584,7 @@ function entrar(nome, sala) {
   // vídeo chegando de quem eu assisto
   peer.on('call', call => {
     if (call.metadata && call.metadata.tipo === 'voz') {
+      if (!naSala(call.peer)) { try { call.close(); } catch (e) {} return; }
       if (!emVoz || !mic) { try { call.close(); } catch (e) {} return; }
       call.answer(mic);
       ligarVoz(call.peer, call);
@@ -1555,7 +1628,7 @@ function entrar(nome, sala) {
 }
 
 // já veio com ?sala= e tem nome salvo: entra direto
-if (params.get('sala') && ler('nome')) $('btnEntrar').click();
+if (params.get('sala') && ler('nome') && !bloqueadoPeloPortao) $('btnEntrar').click();
 </script>
 </body>
 </html>
