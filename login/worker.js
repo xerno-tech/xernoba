@@ -9,6 +9,7 @@
 //   DISCORD_CLIENT_ID     (texto)   Client ID do app no Discord
 //   DISCORD_GUILD_ID      (texto)   ID do servidor do Discord (vários: separe por vírgula)
 //   DISCORD_CLIENT_SECRET (secret)  Client Secret do app no Discord — nunca vai para o GitHub
+//   GIPHY_KEY             (secret)  chave da API do GIPHY, para a busca de GIFs no chat (opcional)
 
 const DIAS = 7;
 
@@ -19,8 +20,8 @@ export default {
     const origem = new URL(site).origin;
     const cors = {
       'Access-Control-Allow-Origin': origem,
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'content-type',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'content-type, x-pulseira',
     };
     if (req.method === 'OPTIONS') return new Response(null, { headers: cors });
 
@@ -77,6 +78,25 @@ export default {
       try { token = String((await req.json()).token || ''); } catch (e) {}
       const dados = await conferir(token, env.DISCORD_CLIENT_SECRET);
       return Response.json(dados ? { ok: true, id: dados.id, nome: dados.nome, avatar: dados.avatar || null, exp: dados.exp } : { ok: false }, { headers: cors });
+    }
+
+    // 4) busca de GIFs para o chat (só para quem está logado)
+    if (url.pathname === '/gifs' && req.method === 'GET') {
+      const dados = await conferir(req.headers.get('x-pulseira') || '', env.DISCORD_CLIENT_SECRET);
+      if (!dados) return Response.json({ ok: false, erro: 'login' }, { headers: cors });
+      if (!env.GIPHY_KEY) return Response.json({ ok: false, erro: 'sem-chave' }, { headers: cors });
+      const q = (url.searchParams.get('q') || '').slice(0, 60);
+      const api = new URL(q ? 'https://api.giphy.com/v1/gifs/search' : 'https://api.giphy.com/v1/gifs/trending');
+      api.search = new URLSearchParams({ api_key: env.GIPHY_KEY, limit: '24', rating: 'pg-13', ...(q ? { q, lang: 'pt' } : {}) });
+      try {
+        const r = await fetch(api).then(x => x.json());
+        const gifs = (r.data || []).map(g => ({
+          url: g.images && g.images.fixed_height && g.images.fixed_height.url,
+          preview: g.images && g.images.fixed_height_small && g.images.fixed_height_small.url,
+          titulo: g.title || '',
+        })).filter(g => g.url);
+        return Response.json({ ok: true, gifs }, { headers: cors });
+      } catch (e) { return Response.json({ ok: false, erro: 'giphy' }, { headers: cors }); }
     }
 
     return new Response('Midori Xernoba — login com Discord. Está funcionando.', { headers: { 'content-type': 'text/plain; charset=utf-8' } });

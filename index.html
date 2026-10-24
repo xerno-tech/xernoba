@@ -141,6 +141,19 @@
   .msg.sis { color:var(--mut); font-size:12px; font-style:italic; }
 
   #formChat { display:flex; gap:6px; padding:10px; border-top:1px solid var(--linha); }
+  #formChat .icone { padding:6px 8px; font-size:12px; font-weight:700; }
+  #chat { position:relative; }
+  #chat.soltando::after { content:"Solte para enviar a imagem"; position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+                          background:rgba(47,191,113,.15); border:2px dashed var(--acc); color:var(--txt); font-size:14px; z-index:5; }
+  .msg img.anexo { display:block; max-width:100%; max-height:200px; border-radius:8px; margin-top:4px; cursor:zoom-in; background:var(--panel2); }
+  #popGif { position:absolute; left:10px; right:10px; bottom:58px; z-index:6; background:var(--panel3); border:1px solid var(--linha); border-radius:12px;
+            padding:8px; display:flex; flex-direction:column; gap:6px; box-shadow:0 10px 26px rgba(0,0,0,.5); }
+  #gridGif { display:grid; grid-template-columns:1fr 1fr; gap:4px; max-height:260px; overflow-y:auto; }
+  #gridGif img { width:100%; height:90px; object-fit:cover; border-radius:6px; cursor:pointer; background:var(--panel2); }
+  #gridGif img:hover { outline:2px solid var(--acc); }
+  #gridGif .mut { grid-column:1/-1; font-size:12px; text-align:center; padding:12px; }
+  #lightbox { position:fixed; inset:0; z-index:60; background:rgba(0,0,0,.85); display:flex; align-items:center; justify-content:center; cursor:zoom-out; padding:20px; }
+  #lightbox img { max-width:100%; max-height:100%; border-radius:8px; }
   #formChat input { flex:1; padding:8px 10px; }
   #formChat button { padding:8px 12px; }
   #membros h2 { font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--mut); margin:2px 6px 10px; font-weight:600; }
@@ -241,6 +254,7 @@
 <body>
 <button id="olho" title="Mostrar/ocultar interface"></button>
 <div id="toasts"></div>
+<div id="lightbox" class="oculto"><img alt=""></div>
 <div id="faixaVersao" class="oculto">🍃 Tem uma versão nova da Midori. <button id="btnAtualizarVersao">Atualizar agora</button><button class="link" id="btnVersaoDepois" title="Depois">✕</button></div>
 
 <!-- ================= ENTRADA ================= -->
@@ -305,9 +319,17 @@
       <div id="chat">
         <h2>Chat</h2>
         <div id="msgs"></div>
+        <div id="popGif" class="oculto">
+          <input type="text" id="inGif" placeholder="Buscar GIF…" autocomplete="off">
+          <div id="gridGif"></div>
+          <span class="mut" style="font-size:10px;text-align:right">GIFs do GIPHY</span>
+        </div>
         <form id="formChat" autocomplete="off">
-          <input type="text" id="inChat" maxlength="300" placeholder="Mandar mensagem…">
+          <button type="button" class="sec icone" id="btnAnexo" title="Enviar imagem ou GIF do PC">📎</button>
+          <button type="button" class="sec icone" id="btnGif" title="Buscar GIF">GIF</button>
+          <input type="text" id="inChat" maxlength="300" placeholder="Mensagem, ou cole uma imagem…">
           <button type="submit" title="Enviar">➤</button>
+          <input type="file" id="arqImg" accept="image/*" hidden>
         </form>
       </div>
     </div>
@@ -466,7 +488,7 @@
 <script>
 const $ = id => document.getElementById(id);
 // Versão desta página. Sobe a cada atualização; quem estiver com uma mais antiga recebe o aviso.
-const VERSAO = 3;
+const VERSAO = 4;
 async function conferirVersao() {
   try {
     const txt = await fetch(location.pathname + '?v=' + Date.now(), { cache: 'no-store' }).then(r => r.text());
@@ -575,6 +597,13 @@ let cid = ler('cid'); if (!cid) { cid = Math.random().toString(36).slice(2) + Da
 
 /* =================== SALA =================== */
 const perfil = { cor: ler('cor') || null, emoji: ler('emoji') || null, foto: ler('foto') !== '0' };
+// imagens no chat: arquivo enviado (data:) de até ~4 MB, ou link de um site conhecido de GIFs/imagens
+const HOSTS_IMG = /^https:\/\/(media\d*\.giphy\.com|i\.giphy\.com|media\.tenor\.com|c\.tenor\.com|cdn\.discordapp\.com|media\.discordapp\.net|i\.imgur\.com)\/[^\s"'<>]+$/i;
+function imagemValida(x) {
+  if (typeof x !== 'string') return false;
+  if (x.startsWith('data:')) return /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(x) && x.length < 4.2e6;
+  return HOSTS_IMG.test(x) && x.length < 600;
+}
 const REACOES = ['😂', '🔥', '😱', '👏', '❤️', '💀'];
 function entrar(nome, sala) {
   $('entrada').classList.add('oculto'); $('sala').classList.remove('oculto');
@@ -634,11 +663,14 @@ function entrar(nome, sala) {
     }
     const vistoEm = new Map();
     // evento: entrou/saiu/live/voz/nome/msg — usado para os sons; alvo: quem o evento envolve
-    const registrar = (texto, nomeAutor, idAutor, evento, alvo, cor) => {
+    const registrar = (texto, nomeAutor, idAutor, evento, alvo, cor, img) => {
       if (saindo) return;   // a página está fechando: as conexões caindo não são saídas de verdade
       const msg = { tipo: 'msg', uid: Math.random().toString(36).slice(2) + Date.now().toString(36), ts: Date.now(), texto,
-                    nome: nomeAutor || null, id: idAutor || null, evento: evento || (nomeAutor ? 'msg' : null), alvo: alvo || idAutor || null, cor: cor || null };
+                    nome: nomeAutor || null, id: idAutor || null, evento: evento || (nomeAutor ? 'msg' : null), alvo: alvo || idAutor || null, cor: cor || null, img: img || null };
       historico.push(msg); if (historico.length > 60) historico.shift();
+      // o histórico guarda só as 8 imagens mais recentes, para não pesar em quem entra
+      const comImg = historico.filter(x => x.img && x.img.startsWith('data:'));
+      for (const x of comImg.slice(0, Math.max(0, comImg.length - 8))) { x.img = null; x.texto = (x.texto ? x.texto + ' ' : '') + '[imagem]'; }
       for (const c of conns.values()) if (c.open) try { c.send(msg); } catch (e) {}
     };
     const difundir = () => {
@@ -746,8 +778,10 @@ function entrar(nome, sala) {
           for (const x of conns.values()) if (x.open) try { x.send(msg); } catch (e) {}
         } else if (d.tipo === 'chat') {
           const m = roster.get(c.peer); if (!m) return;
-          const texto = String(d.texto || '').trim().slice(0, 300); if (!texto) return;
-          registrar(texto, m.nome, c.peer, 'msg', c.peer, m.cor);
+          const texto = String(d.texto || '').trim().slice(0, 300);
+          const img = imagemValida(d.img) ? d.img : null;
+          if (!texto && !img) return;
+          registrar(texto, m.nome, c.peer, 'msg', c.peer, m.cor, img);
         }
       });
       const sair = () => sairDe(c.peer);
@@ -1580,6 +1614,17 @@ function entrar(nome, sala) {
       const q = document.createElement('span'); q.className = 'quem'; q.style.color = m.cor ? clarear(m.cor) : corDe(m.nome).replace('45%', '68%'); q.textContent = m.nome;
       const t = document.createElement('span'); t.textContent = m.texto;
       div.append(h, q, t);
+      // link sozinho de GIF/imagem vira imagem
+      const soLink = !m.img && imagemValida((m.texto || '').trim()) && !m.texto.trim().startsWith('data:') ? m.texto.trim() : null;
+      const src = imagemValida(m.img) ? m.img : soLink;
+      if (src) {
+        if (soLink) t.textContent = '';
+        const im = document.createElement('img'); im.className = 'anexo'; im.src = src; im.alt = 'imagem'; im.loading = 'lazy';
+        im.referrerPolicy = 'no-referrer';
+        im.onload = () => { if (noFim || m.id === euId) box.scrollTop = box.scrollHeight; };
+        im.onclick = () => { $('lightbox').querySelector('img').src = src; $('lightbox').classList.remove('oculto'); };
+        div.appendChild(im);
+      }
     }
     box.appendChild(div);
     while (box.children.length > 200) box.firstChild.remove();
@@ -1587,13 +1632,80 @@ function entrar(nome, sala) {
     if (document.hidden && m.nome && m.id !== euId) { naoLidas++; document.title = `(${naoLidas}) Midori Xernoba · ${sala}`; }
   }
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { naoLidas = 0; document.title = 'Midori Xernoba · ' + sala; } });
+  /* ---- imagens e GIFs no chat ---- */
+  $('lightbox').onclick = () => $('lightbox').classList.add('oculto');
+  const lerArquivo = f => new Promise((ok, erro) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = erro; r.readAsDataURL(f); });
+  async function prepararImagem(f) {
+    if (!f || !f.type.startsWith('image/')) return null;
+    if (f.type === 'image/gif') {
+      if (f.size > 3 * 1024 * 1024) { toast('GIF grande demais (máximo 3 MB).', 'aviso'); return null; }
+      return lerArquivo(f);
+    }
+    // foto: reduz para no máximo 1280 px e comprime
+    const url = URL.createObjectURL(f);
+    try {
+      const im = await new Promise((ok, erro) => { const i = new Image(); i.onload = () => ok(i); i.onerror = erro; i.src = url; });
+      const k = Math.min(1, 1280 / Math.max(im.width, im.height));
+      const cv = document.createElement('canvas'); cv.width = Math.round(im.width * k); cv.height = Math.round(im.height * k);
+      cv.getContext('2d').drawImage(im, 0, 0, cv.width, cv.height);
+      for (const q of [0.85, 0.7, 0.55]) { const d = cv.toDataURL('image/webp', q); if (d.length < 2.5e6) return d.startsWith('data:image/webp') ? d : cv.toDataURL('image/jpeg', q); }
+      toast('Imagem grande demais.', 'aviso'); return null;
+    } catch (e) { toast('Não deu para abrir essa imagem.', 'erro'); return null; }
+    finally { URL.revokeObjectURL(url); }
+  }
+  function enviarChat(texto, img) {
+    if (!hubConn || !hubConn.open) { toast('Ainda conectando à sala… tente de novo em instantes.', 'aviso'); return false; }
+    hubConn.send({ tipo: 'chat', texto: (texto || '').slice(0, 300), img: img || null });
+    return true;
+  }
+  async function enviarArquivo(f) {
+    const d = await prepararImagem(f);
+    if (d && enviarChat($('inChat').value.trim(), d)) $('inChat').value = '';
+  }
+  $('btnAnexo').onclick = () => $('arqImg').click();
+  $('arqImg').onchange = () => { const f = $('arqImg').files[0]; $('arqImg').value = ''; if (f) enviarArquivo(f); };
+  $('inChat').addEventListener('paste', e => {
+    const f = [...(e.clipboardData || {}).files || []].find(x => x.type.startsWith('image/'));
+    if (f) { e.preventDefault(); enviarArquivo(f); }
+  });
+  const chatBox = $('chat');
+  chatBox.addEventListener('dragover', e => { if ([...e.dataTransfer.items].some(i => i.kind === 'file')) { e.preventDefault(); chatBox.classList.add('soltando'); } });
+  chatBox.addEventListener('dragleave', e => { if (!chatBox.contains(e.relatedTarget)) chatBox.classList.remove('soltando'); });
+  chatBox.addEventListener('drop', e => { e.preventDefault(); chatBox.classList.remove('soltando'); const f = [...e.dataTransfer.files].find(x => x.type.startsWith('image/')); if (f) enviarArquivo(f); });
+
+  // busca de GIFs (passa pelo servidor de login, que guarda a chave do GIPHY)
+  let tGif = null;
+  async function buscarGifs(q) {
+    const grid = $('gridGif');
+    if (!LOGIN_URL || !tokenLogin) { grid.innerHTML = '<span class="mut">A busca de GIFs precisa do login pelo Discord.</span>'; return; }
+    grid.innerHTML = '<span class="mut">Buscando…</span>';
+    try {
+      const r = await fetch(`${LOGIN_URL}/gifs?q=${encodeURIComponent(q)}`, { headers: { 'x-pulseira': tokenLogin } }).then(x => x.json());
+      if (!r.ok) { grid.innerHTML = '<span class="mut">' + (r.erro === 'sem-chave' ? 'A busca de GIFs ainda não foi configurada.' : 'Não deu para buscar agora.') + '</span>'; return; }
+      grid.innerHTML = r.gifs.length ? '' : '<span class="mut">Nada encontrado.</span>';
+      for (const g of r.gifs) {
+        if (!imagemValida(g.url)) continue;
+        const im = document.createElement('img'); im.src = g.preview || g.url; im.alt = g.titulo || 'GIF'; im.title = g.titulo || ''; im.loading = 'lazy'; im.referrerPolicy = 'no-referrer';
+        im.onclick = () => { if (enviarChat('', g.url)) $('popGif').classList.add('oculto'); };
+        grid.appendChild(im);
+      }
+    } catch (e) { grid.innerHTML = '<span class="mut">Não deu para buscar agora.</span>'; }
+  }
+  $('btnGif').onclick = e => {
+    e.stopPropagation();
+    const pop = $('popGif'), abrir = pop.classList.contains('oculto');
+    pop.classList.toggle('oculto', !abrir);
+    if (abrir) { $('inGif').value = ''; buscarGifs(''); setTimeout(() => $('inGif').focus(), 30); }
+  };
+  $('inGif').oninput = () => { clearTimeout(tGif); tGif = setTimeout(() => buscarGifs($('inGif').value.trim()), 350); };
+  $('popGif').onclick = e => e.stopPropagation();
+  document.addEventListener('click', () => $('popGif').classList.add('oculto'));
+
   $('formChat').onsubmit = e => {
     e.preventDefault();
     const inp = $('inChat'), texto = inp.value.trim();
     if (!texto) return;
-    if (!hubConn || !hubConn.open) { toast('Ainda conectando à sala… tente de novo em instantes.', 'aviso'); return; }
-    hubConn.send({ tipo: 'chat', texto: texto.slice(0, 300) });
-    inp.value = '';
+    if (enviarChat(texto)) inp.value = '';
   };
 
   /* =================== TRANSMITIR =================== */
