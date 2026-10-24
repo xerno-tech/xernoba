@@ -61,6 +61,16 @@
   #grade.destaque { grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); grid-template-rows:minmax(0,1fr); grid-auto-rows:140px; }
   #grade.destaque .tela.foco { grid-column:1 / -1; grid-row:1; }
   #grade.destaque .tela:not(.foco) { cursor:pointer; }
+  #palco { flex:1; display:flex; flex-direction:column; min-width:0; min-height:0; }
+  #faixaMini { display:flex; gap:8px; padding:0 10px 10px; height:130px; flex-shrink:0; overflow-x:auto; }
+  #faixaMini .tela { width:210px; flex-shrink:0; cursor:pointer; }
+  #faixaMini .tela .ctrl { padding:6px; gap:5px; }
+  #faixaMini .tela .ctrl input[type=range], #faixaMini .tela .ctrl .pct, #faixaMini .tela [data-a=cheia] { display:none; }
+  #faixaMini .tela .selo { display:none; }
+  .tela .pct { font-size:11px; min-width:34px; text-align:right; color:var(--mut); }
+  .tela [data-a=mute].mudo { color:#ff8f9a; border-color:rgba(255,77,94,.6); }
+  .tela .ctrl input[type=range].alto { accent-color:var(--aviso); }
+  body.limpo #faixaMini { padding:2px 0 0; }
   body.semChat #chat { display:none; }
   body.semChat #areaLista { max-height:none; flex:1; }
   .avatar.emoji { font-size:17px; }
@@ -249,8 +259,11 @@
         </form>
       </div>
     </div>
+    <div id="palco">
     <div id="grade">
       <div id="vazio"><div class="grande">🍿</div>Ninguém na tela ainda.<br>Clique em <b>Assistir</b> ao lado de quem está <b style="color:#ff8f9a">ao vivo</b>, ou em <b>Transmitir</b> para mostrar o seu jogo.</div>
+    </div>
+    <div id="faixaMini" class="oculto"></div>
     </div>
   </div>
 </div>
@@ -339,6 +352,7 @@
         <span class="mut" style="font-size:12px">No Destaque, uma tela fica grande e as outras pequenas embaixo. Clique numa pequena para trocar.</span>
       </div>
       <label class="marcar"><input type="checkbox" id="ajChat"> Mostrar o chat</label>
+      <label class="marcar"><input type="checkbox" id="ajMuteMini"> Mutar a transmissão quando eu minimizar</label>
     </div>
   </div>
 </div>
@@ -723,22 +737,88 @@ function entrar(nome, sala) {
       <div class="aviso">Conectando…</div>
       ${local ? '<span class="selo">VOCÊ · AO VIVO</span>' : ''}
       <div class="ctrl"><span class="n"></span>
-        ${local ? '<span class="mut" style="font-size:12px">sem som pra você</span>' : '<span title="Volume">🔊</span><input type="range" min="0" max="1" step="0.01" value="1" title="Volume">'}
+        ${local ? '<span class="mut" style="font-size:12px">sem som pra você</span>' : '<button data-a="mute" title="Mutar esta transmissão">🔊</button><input type="range" min="0" max="2" step="0.05" value="1" title="Volume (até 200%)"><span class="pct">100%</span>'}
+        <button data-a="mini" title="Minimizar">🗕</button>
         <button data-a="cheia" title="Tela cheia">⛶</button>${local ? '' : '<button data-a="fechar" title="Fechar">✕</button>'}
       </div>`;
     t.querySelector('.n').textContent = titulo;
     const v = t.querySelector('video');
     const r = t.querySelector('input[type=range]');
-    if (r) { r.value = ler('vol-' + titulo) || '1'; r.oninput = () => { v.volume = Number(r.value); salvar('vol-' + titulo, r.value); }; }
+    t._chave = titulo;
+    if (r) {
+      r.value = Math.min(2, Number(ler('vol-' + titulo) || '1'));
+      t._mudo = ler('mute-' + titulo) === '1';
+      r.oninput = () => { salvar('vol-' + titulo, r.value); if (t._mudo && Number(r.value) > 0) definirMudo(t, false); aplicarSom(t); };
+      t.querySelector('[data-a=mute]').onclick = e => { e.stopPropagation(); definirMudo(t, !t._mudo); };
+      aplicarSom(t);
+    }
+    t.querySelector('[data-a=mini]').onclick = e => { e.stopPropagation(); minimizar(t, !t.classList.contains('mini')); };
     t.querySelector('[data-a=cheia]').onclick = () => document.fullscreenElement ? document.exitFullscreen() : t.requestFullscreen();
     const f = t.querySelector('[data-a=fechar]'); if (f) f.onclick = () => pararDeAssistir(id);
     v.ondblclick = () => t.querySelector('[data-a=cheia]').click();
-    v.onclick = () => { if (layout === 'destaque') focar(t); };
+    v.onclick = () => { if (t.classList.contains('mini')) minimizar(t, false); else if (layout === 'destaque') focar(t); };
     if (local) $('grade').prepend(t); else $('grade').appendChild(t);
     atualizarVazio(); atualizarFoco();
     return t;
   }
-  function atualizarVazio() { $('vazio').classList.toggle('oculto', $('grade').querySelectorAll('.tela').length > 0); atualizarFoco(); }
+  // ---- som de cada transmissão: passa por um ganho para poder ir até 200% ----
+  let ctxTelas = null;
+  function ligarSom(t, s) {
+    if (!s.getAudioTracks().length) return;
+    try {
+      ctxTelas = ctxTelas || new AudioContext();
+      ctxTelas.resume().catch(() => {});
+      if (t._fonte) try { t._fonte.disconnect(); } catch (e) {}
+      t._fonte = ctxTelas.createMediaStreamSource(s);
+      t._ganho = t._ganho || ctxTelas.createGain();
+      t._fonte.connect(t._ganho); t._ganho.connect(ctxTelas.destination);
+      t.querySelector('video').muted = true;   // o som sai pelo ganho, não pelo vídeo
+      aplicarSom(t);
+    } catch (e) { t._ganho = null; }
+  }
+  function aplicarSom(t) {
+    const r = t.querySelector('input[type=range]'); if (!r) return;
+    const vol = Number(r.value), v = t.querySelector('video');
+    const efetivo = t._mudo ? 0 : vol;
+    if (t._ganho) t._ganho.gain.value = efetivo;
+    else { v.muted = t._mudo; v.volume = Math.min(1, vol); }
+    t.querySelector('.pct').textContent = t._mudo ? 'mudo' : Math.round(vol * 100) + '%';
+    r.classList.toggle('alto', vol > 1);
+    const b = t.querySelector('[data-a=mute]');
+    b.textContent = t._mudo || vol === 0 ? '🔇' : '🔊';
+    b.classList.toggle('mudo', !!t._mudo);
+    b.title = t._mudo ? 'Desmutar' : 'Mutar esta transmissão';
+  }
+  function definirMudo(t, valor, temporario) {
+    t._mudo = valor;
+    if (!temporario) salvar('mute-' + t._chave, valor ? '1' : '0');
+    aplicarSom(t);
+  }
+  document.addEventListener('click', () => { if (ctxTelas && ctxTelas.state !== 'running') ctxTelas.resume().catch(() => {}); });
+
+  // ---- minimizar ----
+  let muteMini = ler('muteMini') === '1';
+  function minimizar(t, sim) {
+    const destino = sim ? $('faixaMini') : $('grade');
+    t.classList.toggle('mini', sim);
+    t.classList.remove('foco');
+    destino.appendChild(t);
+    const v = t.querySelector('video'); v.play().catch(() => {});   // mover pausa o vídeo; volta a tocar
+    const b = t.querySelector('[data-a=mini]'); b.textContent = sim ? '🗖' : '🗕'; b.title = sim ? 'Voltar ao tamanho normal' : 'Minimizar';
+    if (t.querySelector('[data-a=mute]')) {
+      if (sim && muteMini && !t._mudo) { t._mutadoPorMini = true; definirMudo(t, true, true); }
+      if (!sim && t._mutadoPorMini) { t._mutadoPorMini = false; definirMudo(t, false, true); }
+    }
+    $('faixaMini').classList.toggle('oculto', !$('faixaMini').children.length);
+    if (!sim && layout === 'destaque') focar(t);
+    atualizarVazio();
+  }
+
+  function atualizarVazio() {
+    $('vazio').classList.toggle('oculto', document.querySelectorAll('#palco .tela').length > 0);
+    $('faixaMini').classList.toggle('oculto', !$('faixaMini').children.length);
+    atualizarFoco();
+  }
   function focar(t) { $('grade').querySelectorAll('.tela').forEach(x => x.classList.toggle('foco', x === t)); }
   function atualizarFoco() {
     const telas = [...$('grade').querySelectorAll('.tela')];
@@ -763,6 +843,7 @@ function entrar(nome, sala) {
     assistindo.delete(id);
     try { it.call && it.call.close(); } catch (e) {}
     try { it.conn.close(); } catch (e) {}
+    if (it.tela._fonte) try { it.tela._fonte.disconnect(); it.tela._ganho.disconnect(); } catch (e) {}
     it.tela.remove(); atualizarVazio(); renderLista();
   }
 
@@ -863,6 +944,7 @@ function entrar(nome, sala) {
     $('ajVolSom').value = volSom;
     $('ajNotif').checked = notif && 'Notification' in window && Notification.permission === 'granted';
     $('ajChat').checked = mostrarChat;
+    $('ajMuteMini').checked = muteMini;
     aplicarLayout();
     $('ajustes').classList.remove('oculto');
   };
@@ -892,6 +974,7 @@ function entrar(nome, sala) {
   };
   document.querySelectorAll('#ajLayout button').forEach(b => b.onclick = () => { layout = b.dataset.l; salvar('layout', layout); aplicarLayout(); });
   $('ajChat').onchange = () => { mostrarChat = $('ajChat').checked; salvar('chat', mostrarChat ? '1' : '0'); aplicarLayout(); };
+  $('ajMuteMini').onchange = () => { muteMini = $('ajMuteMini').checked; salvar('muteMini', muteMini ? '1' : '0'); };
   aplicarLayout();
 
   /* =================== CHAT =================== */
@@ -1183,12 +1266,15 @@ function entrar(nome, sala) {
     const aviso = it.tela.querySelector('.aviso');
     call.on('stream', s => {
       v.srcObject = s;
-      const r = it.tela.querySelector('input[type=range]'); if (r) v.volume = Number(r.value);
+      ligarSom(it.tela, s);
       aviso.classList.add('oculto');
-      v.play().catch(() => {
+      const pedirClique = () => {
         aviso.textContent = '🔊 Clique para ouvir'; aviso.classList.add('clicavel'); aviso.classList.remove('oculto');
-        aviso.onclick = () => { v.play(); aviso.classList.add('oculto'); };
-      });
+        aviso.onclick = e => { e.stopPropagation(); v.play().catch(() => {}); if (ctxTelas) ctxTelas.resume().catch(() => {}); aviso.classList.add('oculto'); };
+      };
+      // só pede o clique se o navegador realmente bloqueou o som (mover a tela de lugar não conta)
+      v.play().catch(e => { if (e.name === 'NotAllowedError') pedirClique(); });
+      if (ctxTelas && ctxTelas.state !== 'running') setTimeout(() => { if (ctxTelas.state !== 'running') pedirClique(); }, 600);
     });
     const pc = call.peerConnection;
     if (pc) pc.addEventListener('connectionstatechange', () => {
