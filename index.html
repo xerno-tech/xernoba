@@ -488,10 +488,18 @@ function entrar(nome, sala) {
     let senhaHash = regrasSala.senhaHash || null;
     // quem já pode estar na sala com senha (estava dentro quando a senha foi posta, ou acertou a senha)
     const autorizados = new Set(regrasSala.autorizados || []);
-    function sairDe(id) {
+    // saída "de verdade" (fechou a aba): anuncia na hora.
+    // queda (aba adormecida, internet oscilou): só anuncia se a pessoa não voltar em 3 minutos.
+    const pendentes = new Map();   // cid -> timer da saída ainda não anunciada
+    function sairDe(id, deVerdade) {
       conns.delete(id); vistoEm.delete(id);
       const m = roster.get(id);
-      if (m) { roster.delete(id); if (!m._expulso) registrar(`${m.nome} saiu da sala`, null, null, 'saiu', id); difundir(); }
+      if (!m) return;
+      roster.delete(id); difundir();
+      if (m._expulso) return;
+      if (deVerdade || !m.cid) { registrar(`${m.nome} saiu da sala`, null, null, 'saiu', id); return; }
+      clearTimeout(pendentes.get(m.cid));
+      pendentes.set(m.cid, setTimeout(() => { pendentes.delete(m.cid); registrar(`${m.nome} saiu da sala`, null, null, 'saiu', id); }, 180000));
     }
     const vistoEm = new Map();
     // evento: entrou/saiu/live/voz/nome/msg — usado para os sons; alvo: quem o evento envolve
@@ -508,14 +516,14 @@ function entrar(nome, sala) {
       for (const c of conns.values()) if (c.open) try { c.send({ tipo: 'lista', membros: lista, regras }); } catch (e) {}
     };
     hubPeer.on('open', () => { avisoDoHub = registrar; conectarHub(); });
-    // quem some sem avisar (aba fechada, internet caiu) sai depois de 15s sem sinal
-    setInterval(() => { const agora = Date.now(); for (const [id, t] of vistoEm) if (agora - t > 15000) { const c = conns.get(id); vistoEm.delete(id); if (c) try { c.close(); } catch (e) {} sairDe(id); } }, 5000);
+    // quem some sem avisar sai depois de 2,5 min sem sinal (o Chrome atrasa os sinais de abas em segundo plano)
+    setInterval(() => { const agora = Date.now(); for (const [id, t] of vistoEm) if (agora - t > 150000) { const c = conns.get(id); vistoEm.delete(id); if (c) try { c.close(); } catch (e) {} sairDe(id); } }, 5000);
     hubPeer.on('connection', c => {
       conns.set(c.peer, c);
       c.on('data', async d => {
         if (!d || c._fora) return;   // conexão recusada: ignora o que vier depois
         vistoEm.set(c.peer, Date.now());
-        if (d.tipo === 'tchau') { sairDe(c.peer); return; }
+        if (d.tipo === 'tchau') { sairDe(c.peer, true); return; }
         if (d.tipo === 'estado') {
           const antes = roster.get(c.peer);
           const ccid = String(d.cid || '').slice(0, 40);
@@ -536,7 +544,15 @@ function entrar(nome, sala) {
           if (!antes) {
             try { c.send({ tipo: 'historico', msgs: historico }); } catch (e) {}
             // quem só está se reconectando a um hub novo não é anunciado de novo
-            if (!d.voltando) registrar(`${m.nome} entrou na sala`, null, null, 'entrou', c.peer);
+            // a mesma pessoa (mesmo navegador) voltando: tira a entrada antiga, sem anunciar nada
+            let mesma = false;
+            for (const [oid, om] of roster) if (oid !== c.peer && ccid && om.cid === ccid) {
+              mesma = true; om._expulso = true;
+              const oc = conns.get(oid); try { oc && oc.close(); } catch (e) {}
+              conns.delete(oid); vistoEm.delete(oid); roster.delete(oid);
+            }
+            if (pendentes.has(ccid)) { clearTimeout(pendentes.get(ccid)); pendentes.delete(ccid); mesma = true; }   // voltou da queda
+            if (!mesma && !d.voltando) registrar(`${m.nome} entrou na sala`, null, null, 'entrou', c.peer);
           } else {
             if (antes.nome !== m.nome) registrar(`${antes.nome} agora se chama ${m.nome}`, null, null, 'nome', c.peer);
             if (antes.live !== m.live) registrar(m.live ? `${m.nome} começou a transmitir` : `${m.nome} parou de transmitir`, null, null, m.live ? 'live' : 'fimLive', c.peer);
