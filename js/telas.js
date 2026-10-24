@@ -1,4 +1,4 @@
-// Midori Xernoba — telas de transmissão: grade, volume, minimizar, painel de conexão, cinema, rabiscos, clipes e reações
+// Midori Xernoba — telas de transmissão: grade, volume, minimizar, painel de conexão, cinema, rabiscos e reações
 /* ---- Telas na grade ---- */
 function criarTela(id, titulo, local) {
   const t = document.createElement('div');
@@ -9,7 +9,6 @@ function criarTela(id, titulo, local) {
     <div class="ctrl"><span class="n"></span>
       ${local ? '<span class="mut" style="font-size:12px">sem som pra você</span>' : '<button data-a="mute" title="Mutar esta transmissão">🔊</button><input type="range" min="0" max="2" step="0.05" value="1" title="Volume (até 200%)"><span class="pct">100%</span>'}
       <button data-a="lapis" title="Rabiscar na tela">✏️</button>
-      ${local ? '' : '<button data-a="clipe" title="Salvar os últimos 30 segundos">🎬</button>'}
       <button data-a="mini" title="Minimizar">🗕</button>
       <button data-a="info" title="Painel de conexão">ⓘ</button>
       <button data-a="cinema" title="Modo cinema (tela cheia com o chat por cima)">🍿</button>
@@ -22,8 +21,6 @@ function criarTela(id, titulo, local) {
   prepararRabisco(t);
   const fal = document.createElement('div'); fal.className = 'falantes'; t.appendChild(fal);
   ultimoFalantes = '';   // força desenhar quem está falando nesta tela nova
-  const bClipe = t.querySelector('[data-a=clipe]');
-  if (bClipe) bClipe.onclick = e => { e.stopPropagation(); salvarClipe(t); };
   if (!local) {
     const bar = document.createElement('div'); bar.className = 'reacoes';
     for (const e of REACOES) {
@@ -140,7 +137,6 @@ function pararDeAssistir(id) {
   try { it.call && it.call.close(); } catch (e) {}
   try { it.conn.close(); } catch (e) {}
   if (it.tela._fonte) try { it.tela._fonte.disconnect(); it.tela._ganho.disconnect(); } catch (e) {}
-  pararGravador(it.tela);
   if (it.tela._painel) { clearInterval(it.tela._painel.tm); it.tela._painel = null; }
   if (telaCinema === it.tela) sairCinema();
   it.tela.remove(); atualizarVazio(); renderLista();
@@ -284,42 +280,6 @@ function desenharRiscos() {
     if (algum) requestAnimationFrame(passo); else animando = false;
   };
   requestAnimationFrame(passo);
-}
-
-/* =================== CLIPES (últimos 30 s) =================== */
-// Guarda o vídeo que chega em pedaços de 1 s e mantém só os últimos 30.
-let clipesLigados = ler('clipes') !== '0';
-function iniciarGravador(t, s) {
-  pararGravador(t);
-  if (!clipesLigados || typeof MediaRecorder === 'undefined') return;
-  const tipos = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
-  const mime = tipos.find(x => MediaRecorder.isTypeSupported(x));
-  let rec;
-  try { rec = new MediaRecorder(s, { mimeType: mime, videoBitsPerSecond: 5000000, audioBitsPerSecond: 160000 }); } catch (e) { return; }
-  const g = { rec, mime, cabeca: null, pedacos: [], inicio: Date.now() };
-  rec.ondataavailable = ev => {
-    if (!ev.data || !ev.data.size) return;
-    if (!g.cabeca) { g.cabeca = ev.data; return; }   // o primeiro pedaço tem o cabeçalho do arquivo
-    g.pedacos.push(ev.data); if (g.pedacos.length > 30) g.pedacos.shift();
-  };
-  try { rec.start(1000); } catch (e) { return; }
-  t._grav = g;
-}
-function pararGravador(t) { if (t._grav) { try { t._grav.rec.stop(); } catch (e) {} t._grav = null; } }
-function salvarClipe(t) {
-  const g = t._grav;
-  if (!clipesLigados) return toast('Os clipes estão desligados em ⚙️ Ajustes → Layout.', 'aviso');
-  if (!g || !g.cabeca) return toast('Ainda não deu tempo de guardar nada. Espere alguns segundos.', 'aviso');
-  const blob = new Blob([g.cabeca, ...g.pedacos], { type: g.mime.split(';')[0] });
-  const seg = Math.min(30, Math.round((Date.now() - g.inicio) / 1000));
-  const quando = new Date().toLocaleString('pt-BR').replace(/[/:]/g, '-').replace(/, /, '_');
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `midori-${(t._chave || 'clipe').replace(/[^\w-]+/g, '_')}-${quando}.webm`;
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
-  const b = t.querySelector('[data-a=clipe]'); b.classList.add('ativo'); setTimeout(() => b.classList.remove('ativo'), 600);
-  toast(`🎬 Clipe salvo (cerca de ${seg} s) na pasta de downloads.`);
 }
 
 // 12 min, 1h05…

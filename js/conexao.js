@@ -44,7 +44,6 @@ function iniciarConexao() {
     call.on('stream', s => {
       v.srcObject = s;
       ligarSom(it.tela, s);
-      iniciarGravador(it.tela, s);
       aviso.classList.add('oculto');
       const pedirClique = () => {
         aviso.textContent = '🔊 Clique para ouvir'; aviso.classList.add('clicavel'); aviso.classList.remove('oculto');

@@ -133,7 +133,6 @@ $('btnAjustes').onclick = () => {
   $('ajTtsOuvir').checked = ttsOuvir; $('ajTtsAoVivo').checked = ttsAoVivo; $('ajTtsVol').value = ttsVol; $('ajTtsVel').value = ttsVel; preencherVozes();
   $('ajChat').checked = mostrarChat;
   $('ajMuteMini').checked = muteMini;
-  $('ajClipes').checked = clipesLigados;
   atualizarAdminUI();
   aplicarLayout();
   $('ajustes').classList.remove('oculto');
@@ -170,10 +169,6 @@ $('ajNotif').onchange = async () => {
 };
 document.querySelectorAll('#ajLayout button').forEach(b => b.onclick = () => { layout = b.dataset.l; salvar('layout', layout); aplicarLayout(); });
 $('ajChat').onchange = () => { mostrarChat = $('ajChat').checked; salvar('chat', mostrarChat ? '1' : '0'); aplicarLayout(); };
-$('ajClipes').onchange = () => {
-  clipesLigados = $('ajClipes').checked; salvar('clipes', clipesLigados ? '1' : '0');
-  for (const it of assistindo.values()) { const v = it.tela.querySelector('video'); if (clipesLigados && v.srcObject) iniciarGravador(it.tela, v.srcObject); else pararGravador(it.tela); }
-};
 $('ajMuteMini').onchange = () => { muteMini = $('ajMuteMini').checked; salvar('muteMini', muteMini ? '1' : '0'); };
 aplicarLayout();
 

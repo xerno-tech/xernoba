@@ -11,7 +11,7 @@ Espaço fechado para um grupo de amigos **transmitir jogos, conversar por voz e 
 ### O que dá para fazer
 
 - **Transmitir:** console pela placa de captura, uma janela/jogo do PC ou a tela inteira, escolhendo resolução (até 4K), quadros por segundo e qualidade. O som do Discord e das conversas não vai junto.
-- **Assistir:** várias transmissões ao mesmo tempo, em Grade, Flex-Grid ou Destaque; volume de cada uma até 200%, mutar, minimizar, tela cheia, modo cinema com o chat por cima, painel de conexão e clipe dos últimos 30 segundos.
+- **Assistir:** várias transmissões ao mesmo tempo, em Grade, Flex-Grid ou Destaque; volume de cada uma até 200%, mutar, minimizar, tela cheia, modo cinema com o chat por cima e painel de conexão.
 - **Interagir na transmissão:** reações que sobem na tela e rabiscos para apontar coisas.
 - **Voz:** conversa por voz na sala, com escolha de microfone, volume de cada pessoa até 200%, quem está falando em cima das telas e leitura de mensagens em voz alta (TTS) para quem está mutado.
 - **Chat:** imagens e GIFs, links com prévia, @menções, responder, reagir, "fulano está digitando…" e horário em cada mensagem.
@@ -65,7 +65,7 @@ Abra o site, entre com o Discord, digite seu nome e o nome da sala. Quem entrar 
 | `js/sala.js` | A sala: quem organiza a lista (hub), lista de pessoas, "ausente" |
 | `js/admin.js` | Poderes de admin e senha da sala |
 | `js/voz.js` | Voz, microfone, volume de cada pessoa, quem está falando |
-| `js/telas.js` | Telas de transmissão: volume, minimizar, painel, cinema, rabiscos, clipes, reações |
+| `js/telas.js` | Telas de transmissão: volume, minimizar, painel, cinema, rabiscos, reações |
 | `js/ajustes.js` | Janela de ajustes: perfil, sons e avisos, layout |
 | `js/chat.js` | Chat: imagens, links, prévias, menções, respostas, reações, digitando, TTS |
 | `js/transmissao.js` | Transmitir: fonte, captura, resolução, qualidade |
@@ -84,7 +84,7 @@ A private space for a group of friends to **stream games, voice chat and text ch
 ### Features
 
 - **Stream:** a console through a capture card, a PC game/window or the whole screen, with resolution (up to 4K), frame rate and quality options. Discord and in-room voice audio are not sent.
-- **Watch:** several streams at once in Grid, Flex-Grid or Spotlight layouts; per-stream volume up to 200%, mute, minimize, fullscreen, cinema mode with chat overlay, connection panel and a 30-second clip button.
+- **Watch:** several streams at once in Grid, Flex-Grid or Spotlight layouts; per-stream volume up to 200%, mute, minimize, fullscreen, cinema mode with chat overlay and a connection panel.
 - **Interact on streams:** floating reactions and drawing to point things out.
 - **Voice:** in-room voice chat with microphone selection, per-person volume up to 200%, speaking indicators over the streams, and text-to-speech for muted users.
 - **Chat:** images and GIFs, link previews, @mentions, replies, reactions, typing indicator and timestamps.
