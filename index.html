@@ -490,8 +490,7 @@ const lerToken = t => { try { return JSON.parse(atob(t.split('.')[0].replace(/-/
   if (location.hash) history.replaceState(null, '', location.pathname + location.search);
 })();
 let tokenLogin = ler('token') || null;
-// pulseiras antigas (sem o campo da foto) pedem um novo login, uma vez só
-const dadosLogin = () => { const d = tokenLogin && lerToken(tokenLogin); return d && d.exp > Date.now() && 'avatar' in d ? d : null; };
+const dadosLogin = () => { const d = tokenLogin && lerToken(tokenLogin); return d && d.exp > Date.now() ? d : null; };
 const ERROS_LOGIN = {
   fora: 'Sua conta do Discord não está no servidor do grupo.',
   cancelado: 'Você cancelou o login no Discord.',
