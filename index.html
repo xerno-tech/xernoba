@@ -77,10 +77,15 @@
   body.semChat #areaLista { max-height:none; flex:1; }
   .avatar.emoji { font-size:17px; }
   #telaBloqueio { position:fixed; inset:0; z-index:30; background:rgba(0,0,0,.85); display:flex; align-items:center; justify-content:center; padding:16px; }
-  .admBtns { display:none; gap:3px; }
-  .membro:hover .admBtns { display:flex; }
-  .admBtns button { padding:4px 6px; font-size:12px; background:var(--panel3); border:1px solid var(--linha); }
-  .admBtns button.perigo { background:rgba(255,77,94,.15); border-color:rgba(255,77,94,.5); }
+  .membro { position:relative; }
+  .membro .btnMais { padding:4px 8px; font-size:14px; line-height:1; background:none; border:1px solid transparent; color:var(--mut); }
+  .membro .btnMais:hover, .membro .btnMais.aberto { background:var(--panel3); border-color:var(--linha); color:var(--txt); }
+  .admMenu { position:fixed; z-index:40; min-width:190px; background:var(--panel3); border:1px solid var(--linha);
+             border-radius:10px; padding:5px; display:flex; flex-direction:column; box-shadow:0 10px 26px rgba(0,0,0,.5); }
+  .admMenu button { background:none; border:0; text-align:left; padding:8px 10px; font-size:13px; border-radius:7px; }
+  .admMenu button:hover { background:var(--panel2); }
+  .admMenu button.perigo { color:#ff8f9a; background:none; }
+  .admMenu button.perigo:hover { background:rgba(255,77,94,.12); }
   .escudo { font-size:11px; margin-left:3px; }
   /* ajustes */
   #ajustes { position:fixed; inset:0; z-index:12; background:rgba(0,0,0,.7); display:flex; align-items:center; justify-content:center; padding:16px; }
@@ -637,6 +642,7 @@ function entrar(nome, sala) {
   function renderLista() {
     const el = $('lista');
     el.innerHTML = '';
+    document.querySelectorAll('body > .admMenu').forEach(x => x.remove());
     $('tituloMembros').textContent = `Na sala · ${membros.length}`;
     const ordenados = [...membros].sort((a, b) => (b.live - a.live) || a.nome.localeCompare(b.nome));
     for (const m of ordenados) {
@@ -655,14 +661,6 @@ function entrar(nome, sala) {
         r.oninput = () => { salvar('volVoz-' + m.nome, r.value); const v = vozes.get(m.id); if (v && v.audio) v.audio.volume = Number(r.value); };
         div.appendChild(r);
       }
-      if (souAdmin() && !eu) {
-        const box = document.createElement('div'); box.className = 'admBtns';
-        const btn = (txt, titulo, fn, cls) => { const b = document.createElement('button'); b.textContent = txt; b.title = titulo; if (cls) b.className = cls; b.onclick = e => { e.stopPropagation(); fn(); }; box.appendChild(b); };
-        if (m.voz) btn(m.silenciado ? '🎙️' : '🔇', m.silenciado ? 'Liberar o microfone' : 'Silenciar na voz', () => acaoAdmin(m.silenciado ? 'liberar' : 'silenciar', m.id));
-        if (m.live) btn('⏹', 'Parar a transmissão', () => acaoAdmin('parar', m.id));
-        btn('🚫', 'Expulsar da sala', () => { if (confirm(`Expulsar ${m.nome} da sala?`)) acaoAdmin('expulsar', m.id); }, 'perigo');
-        div.appendChild(box);
-      }
       if (m.live && !eu) {
         const vendo = assistindo.has(m.id);
         const b = document.createElement('button');
@@ -670,6 +668,30 @@ function entrar(nome, sala) {
         if (vendo) b.className = 'sec';
         b.onclick = () => vendo ? pararDeAssistir(m.id) : assistir(m);
         div.appendChild(b);
+      }
+      // admin: as ações ficam num menu ⋯, para não cobrir o Assistir
+      if (souAdmin() && !eu) {
+        const mais = document.createElement('button');
+        mais.className = 'btnMais' + (menuAdm === m.id ? ' aberto' : ''); mais.textContent = '⋯'; mais.title = 'Ações de admin';
+        mais.onclick = e => { e.stopPropagation(); menuAdm = menuAdm === m.id ? null : m.id; renderLista(); };
+        div.appendChild(mais);
+        if (menuAdm === m.id) {
+          const menu = document.createElement('div'); menu.className = 'admMenu';
+          menu.onclick = e => e.stopPropagation();
+          const item = (txt, fn, cls) => { const b = document.createElement('button'); b.textContent = txt; if (cls) b.className = cls; b.onclick = () => { menuAdm = null; fn(); renderLista(); }; menu.appendChild(b); };
+          if (m.voz) item(m.silenciado ? '🎙️ Liberar o microfone' : '🔇 Silenciar na voz', () => acaoAdmin(m.silenciado ? 'liberar' : 'silenciar', m.id));
+          if (m.live) item('⏹ Parar a transmissão', () => acaoAdmin('parar', m.id));
+          item('🚫 Expulsar da sala', () => { if (confirm(`Expulsar ${m.nome} da sala?`)) acaoAdmin('expulsar', m.id); }, 'perigo');
+          // flutua por cima de tudo, colado no botão ⋯; se não couber embaixo, abre para cima
+          document.body.appendChild(menu);
+          requestAnimationFrame(() => {
+            const rb = mais.getBoundingClientRect(), rm = menu.getBoundingClientRect();
+            let top = rb.bottom + 4;
+            if (top + rm.height > innerHeight - 8) top = rb.top - rm.height - 4;
+            menu.style.top = Math.max(8, top) + 'px';
+            menu.style.left = Math.max(8, Math.min(innerWidth - rm.width - 8, rb.right - rm.width)) + 'px';
+          });
+        }
       }
       el.appendChild(div);
     }
@@ -679,6 +701,8 @@ function entrar(nome, sala) {
 
   /* =================== ADMIN (cliente) =================== */
   const souAdmin = () => !!membros.find(x => x.id === euId && x.admin);
+  let menuAdm = null;   // de quem está aberto o menu ⋯
+  document.addEventListener('click', () => { if (menuAdm) { menuAdm = null; renderLista(); } });
   function acaoAdmin(acao, alvo, extra) {
     if (!hubConn || !hubConn.open) return toast('Ainda conectando à sala…', 'aviso');
     hubConn.send(Object.assign({ tipo: 'acao', acao, alvo }, extra || {}));
