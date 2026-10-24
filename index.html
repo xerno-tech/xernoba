@@ -1,0 +1,650 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Telinha</title>
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<style>
+  :root {
+    --bg:#0d0d11; --panel:#16161c; --panel2:#1f1f27; --panel3:#272731; --linha:#2b2b35;
+    --txt:#ececf1; --mut:#9494a3; --acc:#7c5cff; --acc2:#6a4cf0; --ok:#3ecf8e; --live:#ff4d5e; --aviso:#ffb347;
+    --raio:12px;
+  }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--txt); font-family:system-ui,-apple-system,"Segoe UI",sans-serif; }
+  body { display:flex; flex-direction:column; overflow:hidden; }
+  button,select,input { font:inherit; color:inherit; }
+  button { background:var(--acc); color:#fff; border:0; border-radius:9px; padding:9px 16px; cursor:pointer; white-space:nowrap; font-weight:500; }
+  button:hover { background:var(--acc2); }
+  button.sec { background:var(--panel2); border:1px solid var(--linha); }
+  button.sec:hover { background:var(--panel3); }
+  button.perigo { background:var(--live); }
+  button.link { background:none; border:0; color:var(--mut); padding:6px 8px; }
+  button.link:hover { color:var(--txt); background:none; }
+  button:disabled { opacity:.45; cursor:default; }
+  select,input[type=text] { background:var(--panel2); border:1px solid var(--linha); border-radius:9px; padding:9px 10px; min-width:0; width:100%; }
+  select:focus,input:focus { outline:2px solid var(--acc); outline-offset:-1px; }
+  .oculto { display:none !important; }
+  .mut { color:var(--mut); }
+
+  /* ---------- Entrada ---------- */
+  #entrada { margin:auto; width:min(380px, calc(100% - 32px)); background:var(--panel); border:1px solid var(--linha);
+             border-radius:16px; padding:26px; display:flex; flex-direction:column; gap:14px; }
+  #entrada h1 { margin:0; font-size:24px; }
+  #entrada p { margin:-6px 0 4px; font-size:13px; color:var(--mut); }
+  .campo { display:flex; flex-direction:column; gap:6px; font-size:13px; color:var(--mut); }
+
+  /* ---------- Sala ---------- */
+  #sala { flex:1; display:flex; flex-direction:column; min-height:0; }
+  #barra { display:flex; align-items:center; gap:10px; padding:10px 60px 10px 14px; background:var(--panel); border-bottom:1px solid var(--linha); min-height:58px; }
+  .marca { font-weight:700; letter-spacing:.01em; }
+  .salaNome { display:flex; align-items:center; gap:4px; background:var(--panel2); border:1px solid var(--linha); border-radius:9px; padding:2px 2px 2px 10px; font-size:14px; }
+  .salaNome button { padding:5px 9px; font-size:12px; }
+  .esp { flex:1; }
+  #aoVivoBox { display:flex; align-items:center; gap:8px; }
+  .pilula { display:flex; align-items:center; gap:7px; font-size:13px; background:rgba(255,77,94,.12); color:#ffb3ba;
+            border:1px solid rgba(255,77,94,.35); border-radius:999px; padding:6px 12px; white-space:nowrap; }
+  .pilula::before { content:""; width:8px; height:8px; border-radius:50%; background:var(--live); animation:pulsa 1.6s infinite; }
+  @keyframes pulsa { 50% { opacity:.35; } }
+
+  #corpo { flex:1; display:flex; min-height:0; }
+  #membros { width:240px; flex-shrink:0; background:var(--panel); border-right:1px solid var(--linha); padding:12px 10px; overflow:auto; }
+  #membros h2 { font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--mut); margin:2px 6px 10px; font-weight:600; }
+  .membro { display:flex; align-items:center; gap:10px; padding:7px 8px; border-radius:9px; }
+  .membro:hover { background:var(--panel2); }
+  .avatar { width:30px; height:30px; border-radius:50%; flex-shrink:0; display:flex; align-items:center; justify-content:center;
+            font-size:13px; font-weight:700; color:#fff; position:relative; }
+  .avatar.live::after { content:""; position:absolute; right:-1px; bottom:-1px; width:10px; height:10px; border-radius:50%; background:var(--live); border:2px solid var(--panel); }
+  .membro .info { flex:1; min-width:0; display:flex; flex-direction:column; }
+  .membro .n { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:14px; }
+  .membro .s { font-size:11px; color:var(--mut); }
+  .membro .s.live { color:#ff8f9a; }
+  .membro button { padding:5px 11px; font-size:12px; }
+
+  #grade { flex:1; display:grid; gap:10px; padding:10px; grid-template-columns:repeat(auto-fit, minmax(340px, 1fr)); grid-auto-rows:minmax(200px, 1fr); min-height:0; overflow:auto; }
+  #vazio { grid-column:1/-1; align-self:center; justify-self:center; text-align:center; color:var(--mut); max-width:340px; line-height:1.5; }
+  #vazio .grande { font-size:40px; margin-bottom:6px; }
+  .tela { position:relative; background:#000; border-radius:var(--raio); overflow:hidden; border:1px solid var(--linha); }
+  .tela video { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; }
+  .tela .ctrl { position:absolute; left:0; right:0; bottom:0; display:flex; gap:8px; align-items:center; padding:10px;
+                background:linear-gradient(transparent, rgba(0,0,0,.8)); opacity:0; transition:opacity .2s; }
+  .tela:hover .ctrl, .tela.fixo .ctrl { opacity:1; }
+  .tela .ctrl .n { flex:1; font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-shadow:0 1px 3px #000; }
+  .tela .ctrl button { padding:5px 10px; font-size:12px; background:rgba(30,30,38,.85); border:1px solid rgba(255,255,255,.12); }
+  .tela .ctrl input[type=range] { width:90px; accent-color:var(--acc); }
+  .tela .aviso { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; text-align:center; padding:16px; color:var(--mut); font-size:14px; }
+  .tela .aviso.clicavel { cursor:pointer; color:var(--txt); background:rgba(0,0,0,.5); }
+  .tela .selo { position:absolute; top:10px; left:10px; font-size:11px; font-weight:700; background:var(--live); color:#fff; border-radius:5px; padding:3px 7px; }
+
+  body.limpo #barra, body.limpo #membros, body.limpo .tela .ctrl, body.limpo .tela .selo { display:none; }
+  body.limpo #grade { padding:0; gap:2px; }
+  body.limpo .tela { border:0; border-radius:0; }
+
+  #olho { position:fixed; top:11px; right:12px; z-index:5; width:36px; height:36px; padding:0; border-radius:50%;
+          background:rgba(23,23,29,.9); border:1px solid var(--linha); display:none; align-items:center; justify-content:center; transition:opacity .3s; }
+  body.naSala #olho { display:flex; }
+  #olho.sumido { opacity:0; pointer-events:none; }
+  #olho svg { width:19px; height:19px; stroke:#fff; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+
+  /* ---------- Janela de transmitir ---------- */
+  #modal { position:fixed; inset:0; z-index:10; background:rgba(0,0,0,.7); display:flex; align-items:center; justify-content:center; padding:16px; }
+  .caixa { width:min(480px,100%); background:var(--panel); border:1px solid var(--linha); border-radius:16px; max-height:100%; overflow:auto; }
+  .passo { padding:22px; display:flex; flex-direction:column; gap:16px; }
+  .topo { display:flex; align-items:center; gap:8px; }
+  .topo h2 { margin:0; font-size:18px; flex:1; }
+  .topo .voltar { padding:4px 8px; font-size:18px; line-height:1; }
+  .opcoes { display:flex; flex-direction:column; gap:8px; }
+  .opcao { background:var(--panel2); border:1px solid var(--linha); text-align:left; display:flex; align-items:center; gap:14px; padding:14px; white-space:normal; border-radius:12px; }
+  .opcao:hover { background:var(--panel3); border-color:var(--acc); }
+  .opcao .ic { font-size:26px; width:36px; text-align:center; }
+  .opcao b { display:block; font-size:15px; }
+  .opcao span { font-size:12px; color:var(--mut); }
+  .opcao .seta { margin-left:auto; color:var(--mut); font-size:18px; }
+  .passos { margin:0; padding:0; list-style:none; display:flex; flex-direction:column; gap:10px; counter-reset:p; }
+  .passos li { display:flex; gap:10px; font-size:14px; line-height:1.4; counter-increment:p; }
+  .passos li::before { content:counter(p); flex-shrink:0; width:22px; height:22px; border-radius:50%; background:var(--panel3); color:var(--txt);
+                       font-size:12px; font-weight:700; display:flex; align-items:center; justify-content:center; }
+  .nota { font-size:12px; color:var(--mut); background:var(--panel2); border-radius:10px; padding:10px 12px; line-height:1.45; }
+  .nota b { color:var(--txt); }
+  .segmentado { display:flex; background:var(--panel2); border:1px solid var(--linha); border-radius:10px; padding:3px; gap:3px; }
+  .segmentado button { flex:1; background:none; border:0; padding:7px; font-size:13px; color:var(--mut); border-radius:8px; }
+  .segmentado button.sel { background:var(--panel3); color:var(--txt); }
+  .rodape { display:flex; justify-content:flex-end; gap:8px; padding-top:4px; }
+  .rodape .grande { padding:10px 22px; }
+  .marcar { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--mut); cursor:pointer; }
+  .marcar input { accent-color:var(--acc); width:16px; height:16px; }
+
+  /* ---------- Avisos ---------- */
+  #toasts { position:fixed; left:50%; bottom:18px; transform:translateX(-50%); z-index:20; display:flex; flex-direction:column; gap:8px; width:min(460px, calc(100% - 24px)); }
+  .toast { background:var(--panel3); border:1px solid var(--linha); border-left:4px solid var(--acc); border-radius:10px; padding:11px 14px;
+           font-size:13px; line-height:1.4; box-shadow:0 8px 24px rgba(0,0,0,.4); animation:entra .2s; }
+  .toast.aviso { border-left-color:var(--aviso); }
+  .toast.erro { border-left-color:var(--live); }
+  @keyframes entra { from { transform:translateY(8px); opacity:0; } }
+
+  @media (max-width:720px) {
+    #barra { flex-wrap:wrap; }
+    .marca { display:none; }
+    #corpo { flex-direction:column; }
+    #membros { width:auto; max-height:30vh; border-right:0; border-bottom:1px solid var(--linha); }
+    #grade { grid-template-columns:1fr; }
+    .tela .ctrl { opacity:1; }
+  }
+</style>
+</head>
+<body>
+<button id="olho" title="Mostrar/ocultar interface"></button>
+<div id="toasts"></div>
+
+<!-- ================= ENTRADA ================= -->
+<div id="entrada">
+  <h1>📺 Telinha</h1>
+  <p>Transmita seu jogo para os amigos, direto do navegador.</p>
+  <label class="campo">Seu nome <input type="text" id="inNome" maxlength="24" placeholder="Ex.: Xernoba" autocomplete="nickname"></label>
+  <label class="campo">Sala <input type="text" id="inSala" maxlength="32" placeholder="Ex.: galera-x7k2"></label>
+  <button id="btnEntrar">Entrar na sala</button>
+</div>
+
+<!-- ================= SALA ================= -->
+<div id="sala" class="oculto">
+  <div id="barra">
+    <span class="marca">📺 Telinha</span>
+    <span class="salaNome"><span id="txtSala"></span><button class="link" id="btnLink" title="Copiar link da sala">🔗 Copiar link</button></span>
+    <span class="esp"></span>
+    <div id="aoVivoBox" class="oculto">
+      <span class="pilula" id="pilula">AO VIVO</span>
+      <button class="sec" id="btnTrocar">Trocar</button>
+      <button class="perigo" id="btnParar">Parar</button>
+    </div>
+    <button id="btnTransmitir">📡 Transmitir</button>
+  </div>
+  <div id="corpo">
+    <div id="membros"><h2 id="tituloMembros">Na sala</h2><div id="lista"></div></div>
+    <div id="grade">
+      <div id="vazio"><div class="grande">🍿</div>Ninguém na tela ainda.<br>Clique em <b>Assistir</b> ao lado de quem está <b style="color:#ff8f9a">ao vivo</b>, ou em <b>Transmitir</b> para mostrar o seu jogo.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= JANELA DE TRANSMITIR ================= -->
+<div id="modal" class="oculto">
+  <div class="caixa">
+
+    <!-- Passo 1: escolher a fonte -->
+    <div class="passo" id="pFonte">
+      <div class="topo"><h2>O que você vai transmitir?</h2><button class="link" data-fechar>✕</button></div>
+      <div class="opcoes">
+        <button class="opcao" data-fonte="console"><span class="ic">🎮</span><div><b>Console</b><span>Pela placa de captura (ou uma câmera)</span></div><span class="seta">›</span></button>
+        <button class="opcao" data-fonte="janela"><span class="ic">🕹️</span><div><b>Jogo do PC</b><span>Uma janela ou guia, com o som só dela</span></div><span class="seta">›</span></button>
+        <button class="opcao" data-fonte="tela"><span class="ic">🖥️</span><div><b>Tela inteira</b><span>A tela toda, com o som só do jogo</span></div><span class="seta">›</span></button>
+      </div>
+      <div class="nota">Em todos os modos, o som do <b>Discord</b> e das conversas <b>não vai</b> para a transmissão.</div>
+    </div>
+
+    <!-- Passo 2: configurar -->
+    <div class="passo oculto" id="pConfig">
+      <div class="topo"><button class="link voltar" id="btnVoltar" title="Voltar">‹</button><h2 id="tituloConfig"></h2><button class="link" data-fechar>✕</button></div>
+
+      <div id="cfgConsole" class="oculto" style="display:flex;flex-direction:column;gap:12px">
+        <label class="campo">Vídeo <select id="selVideo"></select></label>
+        <label class="campo">Som <select id="selAudio"></select></label>
+      </div>
+
+      <ol class="passos oculto" id="cfgJanela">
+        <li>Clique em <b>Começar</b>.</li>
+        <li>No Chrome, abra a aba <b>Janela</b> e clique no jogo (ou na aba <b>Guia</b>, para um vídeo ou site).</li>
+        <li>Ligue <b>"Partilhar também o áudio da app"</b> e confirme.</li>
+      </ol>
+
+      <ol class="passos oculto" id="cfgTela">
+        <li>Clique em <b>Começar</b> e escolha a <b>tela</b> que vai aparecer.</li>
+        <li>Em seguida, escolha a <b>janela do jogo</b>: dela vem só o som.</li>
+      </ol>
+
+      <div class="nota oculto" id="notaJogo">Se o jogo aparecer <b>preto</b>, coloque-o em <b>janela sem bordas</b> nas configurações de vídeo dele.</div>
+
+      <div class="campo">Qualidade
+        <div class="segmentado" id="segQual">
+          <button data-q="3000">Leve</button><button data-q="6000">Boa</button><button data-q="10000">Alta</button>
+        </div>
+        <span class="mut" id="dicaQual" style="font-size:12px"></span>
+      </div>
+
+      <div class="rodape">
+        <button class="sec" data-fechar>Cancelar</button>
+        <button class="grande" id="btnComecar">Começar</button>
+      </div>
+    </div>
+
+    <!-- Passo 3: som da tela inteira -->
+    <div class="passo oculto" id="pSom">
+      <div class="topo"><h2>Agora o som 🔊</h2></div>
+      <div class="nota" style="font-size:13px">Sua tela já está ao vivo. Falta escolher <b>de onde vem o som</b>, para ir só o do jogo, sem Discord.</div>
+      <ol class="passos">
+        <li>Clique em <b>Escolher o som</b>.</li>
+        <li>Na aba <b>Janela</b>, clique no <b>jogo</b>.</li>
+        <li>Ligue <b>"Partilhar também o áudio da app"</b> e confirme.</li>
+      </ol>
+      <div class="rodape">
+        <button class="sec" id="btnSemSom">Seguir sem som</button>
+        <button class="grande" id="btnEscolherSom">Escolher o som</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const salvar = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
+const ler = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+const limpar = s => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 32);
+const sdpEstereo = sdp => sdp.replace(/useinbandfec=1/g, 'useinbandfec=1;stereo=1;sprop-stereo=1;maxaveragebitrate=192000');
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+const corDe = s => { let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) % 360; return `hsl(${h} 55% 45%)`; };
+
+/* ---------- Avisos ---------- */
+function toast(msg, tipo = '', ms = 6000) {
+  const t = document.createElement('div');
+  t.className = 'toast ' + tipo; t.innerHTML = msg;
+  $('toasts').appendChild(t);
+  setTimeout(() => t.remove(), ms);
+}
+
+/* ---------- Olho ---------- */
+const olho = $('olho');
+const ICON_ABERTO = '<svg viewBox="0 0 24 24"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+const ICON_FECHADO = '<svg viewBox="0 0 24 24"><path d="M17.9 17.9A10.8 10.8 0 0 1 12 19c-7 0-11-7-11-7a19.6 19.6 0 0 1 5.1-5.9M9.9 5.2A9.7 9.7 0 0 1 12 5c7 0 11 7 11 7a19.7 19.7 0 0 1-2.2 3.2M14.1 14.1a3 3 0 1 1-4.2-4.2"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+let ui = ler('interface') !== 'off';
+function atualizarOlho() { olho.innerHTML = ui ? ICON_ABERTO : ICON_FECHADO; olho.title = ui ? 'Esconder interface' : 'Mostrar interface'; document.body.classList.toggle('limpo', !ui); }
+olho.onclick = () => { ui = !ui; salvar('interface', ui ? 'on' : 'off'); atualizarOlho(); };
+let tOlho;
+document.addEventListener('mousemove', () => {
+  olho.classList.remove('sumido'); clearTimeout(tOlho);
+  if (!ui) tOlho = setTimeout(() => olho.classList.add('sumido'), 2500);
+});
+atualizarOlho();
+
+/* ---------- Entrada ---------- */
+const params = new URLSearchParams(location.search);
+$('inNome').value = ler('nome') || '';
+$('inSala').value = params.get('sala') || ler('sala') || '';
+$('btnEntrar').onclick = () => {
+  const nome = $('inNome').value.trim().slice(0, 24);
+  const sala = limpar($('inSala').value);
+  if (!nome) return $('inNome').focus();
+  if (!sala) return $('inSala').focus();
+  salvar('nome', nome); salvar('sala', sala);
+  history.replaceState(null, '', location.pathname + '?sala=' + sala);
+  entrar(nome, sala);
+};
+for (const id of ['inNome', 'inSala']) $(id).addEventListener('keydown', e => { if (e.key === 'Enter') $('btnEntrar').click(); });
+
+/* =================== SALA =================== */
+function entrar(nome, sala) {
+  $('entrada').classList.add('oculto'); $('sala').classList.remove('oculto');
+  document.body.classList.add('naSala');
+  $('txtSala').textContent = '# ' + sala;
+  document.title = 'Telinha · ' + sala;
+  const HUB = 'telinha-hub-' + sala;
+
+  let peer = null, hubPeer = null, hubConn = null, euId = null;
+  let stream = null, aoVivo = false;
+  let membros = [];
+  const assistentes = new Map();   // quem me assiste: id -> {conn, call}
+  const assistindo = new Map();    // quem eu assisto: id -> {conn, call, tela}
+
+  /* ---- Hub: organiza a lista da sala (o primeiro a entrar assume) ---- */
+  function virarHub() {
+    if (hubPeer) return;
+    hubPeer = new Peer(HUB);
+    const roster = new Map(), conns = new Map();
+    const difundir = () => {
+      const lista = [...roster.values()];
+      for (const c of conns.values()) if (c.open) try { c.send({ tipo: 'lista', membros: lista }); } catch (e) {}
+    };
+    hubPeer.on('open', () => conectarHub());
+    hubPeer.on('connection', c => {
+      conns.set(c.peer, c);
+      c.on('data', d => { if (d && d.tipo === 'estado') { roster.set(c.peer, { id: c.peer, nome: String(d.nome).slice(0, 24), live: !!d.live }); difundir(); } });
+      const sair = () => { conns.delete(c.peer); roster.delete(c.peer); difundir(); };
+      c.on('close', sair); c.on('error', sair);
+    });
+    hubPeer.on('error', e => { if (e.type === 'unavailable-id') { try { hubPeer.destroy(); } catch (x) {} hubPeer = null; conectarHub(); } });
+    hubPeer.on('disconnected', () => { try { hubPeer.reconnect(); } catch (e) {} });
+    setInterval(difundir, 5000);
+  }
+  let tHub;
+  function conectarHub() {
+    clearTimeout(tHub);
+    if (hubConn) try { hubConn.close(); } catch (e) {}
+    hubConn = peer.connect(HUB, { reliable: true });
+    hubConn.on('open', enviarEstado);
+    hubConn.on('data', d => { if (d && d.tipo === 'lista') { membros = d.membros; renderLista(); } });
+    hubConn.on('close', () => { hubConn = null; agendarHub(); });
+  }
+  function agendarHub() {
+    clearTimeout(tHub);
+    tHub = setTimeout(() => { if (!hubConn || !hubConn.open) virarHub(); if (hubPeer && hubPeer.open) conectarHub(); }, 500 + Math.random() * 2000);
+  }
+  function enviarEstado() { if (hubConn && hubConn.open) hubConn.send({ tipo: 'estado', nome, live: aoVivo }); }
+
+  /* ---- Lista de quem está na sala ---- */
+  function renderLista() {
+    const el = $('lista');
+    el.innerHTML = '';
+    $('tituloMembros').textContent = `Na sala · ${membros.length}`;
+    const ordenados = [...membros].sort((a, b) => (b.live - a.live) || a.nome.localeCompare(b.nome));
+    for (const m of ordenados) {
+      const eu = m.id === euId;
+      const div = document.createElement('div');
+      div.className = 'membro';
+      div.innerHTML = `<div class="avatar ${m.live ? 'live' : ''}" style="background:${corDe(m.nome)}">${esc(m.nome.charAt(0).toUpperCase())}</div>
+        <div class="info"><span class="n">${esc(m.nome)}${eu ? ' <span class="mut">(você)</span>' : ''}</span>
+        <span class="s ${m.live ? 'live' : ''}">${m.live ? 'Ao vivo' : 'Assistindo'}</span></div>`;
+      if (m.live && !eu) {
+        const vendo = assistindo.has(m.id);
+        const b = document.createElement('button');
+        b.textContent = vendo ? 'Fechar' : 'Assistir';
+        if (vendo) b.className = 'sec';
+        b.onclick = () => vendo ? pararDeAssistir(m.id) : assistir(m);
+        div.appendChild(b);
+      }
+      el.appendChild(div);
+    }
+    for (const id of [...assistindo.keys()]) if (!membros.some(m => m.id === id && m.live)) pararDeAssistir(id);
+  }
+
+  /* ---- Telas na grade ---- */
+  function criarTela(id, titulo, local) {
+    const t = document.createElement('div');
+    t.className = 'tela';
+    t.innerHTML = `<video autoplay playsinline ${local ? 'muted' : ''}></video>
+      <div class="aviso">Conectando…</div>
+      ${local ? '<span class="selo">VOCÊ · AO VIVO</span>' : ''}
+      <div class="ctrl"><span class="n"></span>
+        ${local ? '<span class="mut" style="font-size:12px">sem som pra você</span>' : '<span title="Volume">🔊</span><input type="range" min="0" max="1" step="0.01" value="1" title="Volume">'}
+        <button data-a="cheia" title="Tela cheia">⛶</button>${local ? '' : '<button data-a="fechar" title="Fechar">✕</button>'}
+      </div>`;
+    t.querySelector('.n').textContent = titulo;
+    const v = t.querySelector('video');
+    const r = t.querySelector('input[type=range]');
+    if (r) { r.value = ler('vol-' + titulo) || '1'; r.oninput = () => { v.volume = Number(r.value); salvar('vol-' + titulo, r.value); }; }
+    t.querySelector('[data-a=cheia]').onclick = () => document.fullscreenElement ? document.exitFullscreen() : t.requestFullscreen();
+    const f = t.querySelector('[data-a=fechar]'); if (f) f.onclick = () => pararDeAssistir(id);
+    v.ondblclick = () => t.querySelector('[data-a=cheia]').click();
+    if (local) $('grade').prepend(t); else $('grade').appendChild(t);
+    atualizarVazio();
+    return t;
+  }
+  function atualizarVazio() { $('vazio').classList.toggle('oculto', $('grade').querySelectorAll('.tela').length > 0); }
+
+  function assistir(m) {
+    if (assistindo.has(m.id)) return;
+    const tela = criarTela(m.id, m.nome, false);
+    const conn = peer.connect(m.id, { reliable: true, metadata: { tipo: 'assistir' } });
+    const item = { conn, call: null, tela };
+    assistindo.set(m.id, item);
+    conn.on('close', () => { if (assistindo.get(m.id) === item) pararDeAssistir(m.id); });
+    renderLista();
+  }
+  function pararDeAssistir(id) {
+    const it = assistindo.get(id); if (!it) return;
+    assistindo.delete(id);
+    try { it.call && it.call.close(); } catch (e) {}
+    try { it.conn.close(); } catch (e) {}
+    it.tela.remove(); atualizarVazio(); renderLista();
+  }
+
+  /* =================== TRANSMITIR =================== */
+  const selVideo = $('selVideo'), selAudio = $('selAudio');
+  let fonte = null, qual = ler('qual') || '6000';
+  let telaLocal = null, extras = [];
+  const pararExtras = () => { extras.forEach(t => t.stop()); extras = []; };
+
+  // --- dispositivos (para o modo Console) ---
+  async function listar() {
+    const devs = await navigator.mediaDevices.enumerateDevices();
+    const preencher = (sel, tipo, chave, primeiro) => {
+      const atual = sel.value || ler(chave);
+      sel.innerHTML = '';
+      if (primeiro) { const o = document.createElement('option'); o.value = 'nenhum'; o.textContent = primeiro; sel.appendChild(o); }
+      devs.filter(d => d.kind === tipo).forEach((d, i) => {
+        const o = document.createElement('option'); o.value = d.deviceId; o.textContent = d.label || `Dispositivo ${i + 1}`; sel.appendChild(o);
+      });
+      if (atual && [...sel.options].some(o => o.value === atual)) sel.value = atual;
+      return !!atual && sel.value === atual;
+    };
+    preencher(selVideo, 'videoinput', 'video');
+    const tinhaSom = preencher(selAudio, 'audioinput', 'audio', 'Sem som');
+    if (!tinhaSom) sugerirSom();
+  }
+  // escolhe o som que parece ser da mesma placa do vídeo (ex.: "USB2 Video" → "USB2 Digital Audio")
+  function sugerirSom() {
+    const nomeV = (selVideo.selectedOptions[0] || {}).textContent || '';
+    const idHw = (nomeV.match(/\(([0-9a-f]{4}:[0-9a-f]{4})\)/i) || [])[1];
+    const palavra = (nomeV.match(/[A-Za-z0-9]{3,}/) || [])[0];
+    const achado = [...selAudio.options].find(o => (idHw && o.textContent.includes(idHw)) || (palavra && o.textContent.includes(palavra)));
+    if (achado) selAudio.value = achado.value;
+  }
+  selVideo.onchange = () => { sugerirSom(); };
+
+  // --- janela de transmitir ---
+  const modal = $('modal');
+  const TITULOS = { console: '🎮 Console', janela: '🕹️ Jogo do PC', tela: '🖥️ Tela inteira' };
+  const DICAS_QUAL = { 3000: 'Para internet mais fraca ou 3+ pessoas assistindo.', 6000: 'Recomendado para a maioria.', 10000: 'Imagem mais nítida. Precisa de internet muito boa.' };
+  function mostrarPasso(id) { for (const p of ['pFonte', 'pConfig', 'pSom']) $(p).classList.toggle('oculto', p !== id); modal.classList.remove('oculto'); }
+  function fecharModal() { modal.classList.add('oculto'); }
+  function abrirModal() { mostrarPasso('pFonte'); }
+  function atualizarQual() {
+    document.querySelectorAll('#segQual button').forEach(b => b.classList.toggle('sel', b.dataset.q === qual));
+    $('dicaQual').textContent = DICAS_QUAL[qual];
+  }
+  document.querySelectorAll('#segQual button').forEach(b => b.onclick = () => {
+    qual = b.dataset.q; salvar('qual', qual); atualizarQual();
+    if (aoVivo) for (const a of assistentes.values()) aplicarBitrate(a.call);
+  });
+  atualizarQual();
+
+  document.querySelectorAll('.opcao').forEach(b => b.onclick = async () => {
+    fonte = b.dataset.fonte;
+    $('tituloConfig').textContent = TITULOS[fonte];
+    $('cfgConsole').classList.toggle('oculto', fonte !== 'console');
+    $('cfgJanela').classList.toggle('oculto', fonte !== 'janela');
+    $('cfgTela').classList.toggle('oculto', fonte !== 'tela');
+    $('notaJogo').classList.toggle('oculto', fonte === 'console');
+    mostrarPasso('pConfig');
+    if (fonte === 'console' && (!selVideo.options.length || /^Dispositivo \d/.test(selVideo.options[0].textContent))) {
+      try { const t = await navigator.mediaDevices.getUserMedia({ video: true, audio: true }); t.getTracks().forEach(x => x.stop()); }
+      catch (e) { toast('Sem permissão para a câmera/placa. Libere no ícone do cadeado ao lado do endereço.', 'erro'); }
+      await listar();
+    }
+  });
+  $('btnVoltar').onclick = () => mostrarPasso('pFonte');
+  document.querySelectorAll('[data-fechar]').forEach(b => b.onclick = fecharModal);
+  modal.onclick = e => { if (e.target === modal && $('pSom').classList.contains('oculto')) fecharModal(); };
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !modal.classList.contains('oculto') && $('pSom').classList.contains('oculto')) fecharModal(); });
+
+  $('btnComecar').onclick = () => { fecharModal(); iniciarTransmissao(); };
+
+  // --- captura ---
+  const SEM_PROC = { echoCancellation: false, noiseSuppression: false, autoGainControl: false };
+  async function capturar() {
+    if (fonte === 'console') {
+      const comSom = selAudio.value && selAudio.value !== 'nenhum';
+      const s = await navigator.mediaDevices.getUserMedia({
+        video: { deviceId: selVideo.value ? { exact: selVideo.value } : undefined, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 60 } },
+        audio: comSom ? { deviceId: { exact: selAudio.value }, ...SEM_PROC, channelCount: { ideal: 2 }, sampleRate: { ideal: 48000 } } : false
+      });
+      salvar('video', selVideo.value); salvar('audio', selAudio.value);
+      return { s, faltaSom: false };
+    }
+    const VIDEO = { frameRate: { ideal: 60 }, width: { ideal: 1920 }, height: { ideal: 1080 } };
+    if (fonte === 'janela') {
+      const s = await navigator.mediaDevices.getDisplayMedia({
+        video: VIDEO, audio: { ...SEM_PROC, restrictOwnAudio: true },
+        systemAudio: 'exclude', windowAudio: 'window', monitorTypeSurfaces: 'exclude',
+        selfBrowserSurface: 'exclude', surfaceSwitching: 'include'
+      });
+      // garantia: som do PC inteiro nunca vai
+      if (s.getVideoTracks()[0].getSettings().displaySurface === 'monitor') s.getAudioTracks().forEach(t => { t.stop(); s.removeTrack(t); });
+      if (!s.getAudioTracks().length) toast('Foi <b>sem som</b>: a opção "Partilhar também o áudio da app" ficou desligada. Clique em <b>Trocar</b> para refazer.', 'aviso', 9000);
+      return { s, faltaSom: false };
+    }
+    // tela inteira: só a imagem aqui; o som vem de uma janela depois
+    const s = await navigator.mediaDevices.getDisplayMedia({
+      video: { ...VIDEO, displaySurface: 'monitor' }, audio: false,
+      systemAudio: 'exclude', monitorTypeSurfaces: 'include', selfBrowserSurface: 'exclude', surfaceSwitching: 'include'
+    });
+    return { s, faltaSom: true };
+  }
+
+  async function aplicarBitrate(call) {
+    const pc = call && call.peerConnection; if (!pc) return;
+    for (const snd of pc.getSenders()) {
+      if (!snd.track || snd.track.kind !== 'video') continue;
+      const p = snd.getParameters();
+      if (!p.encodings || !p.encodings.length) p.encodings = [{}];
+      p.encodings[0].maxBitrate = Number(qual) * 1000;
+      p.degradationPreference = 'maintain-framerate';
+      try { await snd.setParameters(p); } catch (e) {}
+    }
+  }
+  function enviarPara(id) {
+    const a = assistentes.get(id); if (!a || !stream) return;
+    if (a.call) try { a.call.close(); } catch (e) {}
+    const call = peer.call(id, stream, { sdpTransform: sdpEstereo, metadata: { tipo: 'video' } });
+    a.call = call;
+    const pc = call.peerConnection;
+    if (pc) pc.addEventListener('connectionstatechange', () => { if (pc.connectionState === 'connected') aplicarBitrate(call); });
+  }
+  function atualizarAoVivo() {
+    $('aoVivoBox').classList.toggle('oculto', !aoVivo);
+    $('btnTransmitir').classList.toggle('oculto', aoVivo);
+    const n = assistentes.size;
+    $('pilula').textContent = `AO VIVO · ${n} ${n === 1 ? 'assistindo' : 'assistindo'}`;
+  }
+
+  async function iniciarTransmissao() {
+    try {
+      const { s, faltaSom } = await capturar();
+      const vt = s.getVideoTracks()[0];
+      if (vt) { vt.contentHint = 'motion'; vt.onended = () => pararTransmissao(); }
+      s.getAudioTracks().forEach(t => t.contentHint = 'music');
+      if (stream) { stream.getVideoTracks().forEach(t => t.onended = null); stream.getTracks().forEach(t => t.stop()); }
+      pararExtras();
+      stream = s; aoVivo = true;
+      if (!telaLocal) telaLocal = criarTela('eu', nome, true);
+      telaLocal.querySelector('video').srcObject = stream;
+      telaLocal.querySelector('.aviso').classList.add('oculto');
+      for (const id of assistentes.keys()) enviarPara(id);
+      atualizarAoVivo();
+      enviarEstado();
+      if (faltaSom) mostrarPasso('pSom');
+      else toast('Você está <b>ao vivo</b>. Seus amigos já podem clicar em Assistir.');
+    } catch (e) {
+      if (e.name === 'NotAllowedError') return;   // cancelou a escolha
+      toast('Não deu para começar: ' + esc(e.message) + (fonte === 'console' ? '<br>Feche OBS, VLC ou outra guia que esteja usando a placa.' : ''), 'erro', 9000);
+    }
+  }
+  function pararTransmissao() {
+    if (stream) { stream.getVideoTracks().forEach(t => t.onended = null); stream.getTracks().forEach(t => t.stop()); }
+    pararExtras();
+    stream = null; aoVivo = false;
+    for (const a of assistentes.values()) if (a.call) try { a.call.close(); } catch (e) {}
+    if (telaLocal) { telaLocal.remove(); telaLocal = null; atualizarVazio(); }
+    if (!$('pSom').classList.contains('oculto')) fecharModal();
+    atualizarAoVivo();
+    enviarEstado();
+  }
+
+  // --- som da tela inteira, vindo de uma janela ---
+  $('btnSemSom').onclick = () => { fecharModal(); toast('Ao vivo <b>sem som</b>. Para adicionar, clique em <b>Trocar</b>.', 'aviso'); };
+  $('btnEscolherSom').onclick = async () => {
+    if (!stream) return fecharModal();
+    try {
+      const so = await navigator.mediaDevices.getDisplayMedia({
+        video: true, audio: { ...SEM_PROC, restrictOwnAudio: true },
+        systemAudio: 'exclude', windowAudio: 'window', monitorTypeSurfaces: 'exclude', selfBrowserSurface: 'exclude'
+      });
+      const at = so.getAudioTracks()[0];
+      // a imagem desta janela não é usada; fica desligada (parar poderia encerrar o som)
+      so.getVideoTracks().forEach(t => { t.enabled = false; extras.push(t); });
+      if (!at) { pararExtras(); toast('Não veio som. Ligue <b>"Partilhar também o áudio da app"</b> e tente de novo.', 'aviso'); return; }
+      at.contentHint = 'music';
+      stream.getAudioTracks().forEach(t => { t.stop(); stream.removeTrack(t); });
+      stream.addTrack(at);
+      for (const id of assistentes.keys()) enviarPara(id);
+      fecharModal();
+      toast('Pronto! Tela inteira com o <b>som só do jogo</b>. Você está ao vivo.');
+    } catch (e) {
+      if (e.name !== 'NotAllowedError') toast('Não deu para pegar o som: ' + esc(e.message), 'erro');
+    }
+  };
+
+  $('btnTransmitir').onclick = abrirModal;
+  $('btnTrocar').onclick = abrirModal;
+  $('btnParar').onclick = pararTransmissao;
+  navigator.mediaDevices.addEventListener('devicechange', listar);
+  $('btnLink').onclick = async () => {
+    const url = location.origin + location.pathname + '?sala=' + sala;
+    try { await navigator.clipboard.writeText(url); toast('Link da sala copiado. É só mandar para a galera.'); }
+    catch (e) { prompt('Link da sala:', url); }
+  };
+  listar();
+
+  /* =================== CONEXÃO =================== */
+  peer = new Peer();
+  peer.on('open', id => { euId = id; virarHub(); setTimeout(() => { if (!hubConn) conectarHub(); }, 800); });
+
+  // alguém quer me assistir
+  peer.on('connection', conn => {
+    if (!conn.metadata || conn.metadata.tipo !== 'assistir') return;
+    assistentes.set(conn.peer, { conn, call: null });
+    conn.on('open', () => { enviarPara(conn.peer); atualizarAoVivo(); });
+    const sair = () => { const a = assistentes.get(conn.peer); if (a && a.call) try { a.call.close(); } catch (e) {} assistentes.delete(conn.peer); atualizarAoVivo(); };
+    conn.on('close', sair); conn.on('error', sair);
+  });
+
+  // vídeo chegando de quem eu assisto
+  peer.on('call', call => {
+    const it = assistindo.get(call.peer);
+    if (!it) { try { call.close(); } catch (e) {} return; }
+    call.answer(undefined, { sdpTransform: sdpEstereo });
+    if (it.call && it.call !== call) try { it.call.close(); } catch (e) {}
+    it.call = call;
+    const v = it.tela.querySelector('video');
+    const aviso = it.tela.querySelector('.aviso');
+    call.on('stream', s => {
+      v.srcObject = s;
+      const r = it.tela.querySelector('input[type=range]'); if (r) v.volume = Number(r.value);
+      aviso.classList.add('oculto');
+      v.play().catch(() => {
+        aviso.textContent = '🔊 Clique para ouvir'; aviso.classList.add('clicavel'); aviso.classList.remove('oculto');
+        aviso.onclick = () => { v.play(); aviso.classList.add('oculto'); };
+      });
+    });
+    const pc = call.peerConnection;
+    if (pc) pc.addEventListener('connectionstatechange', () => {
+      if (pc.connectionState === 'failed') { aviso.textContent = 'Não deu para conectar direto com essa pessoa (a rede de um de vocês está bloqueando).'; aviso.classList.remove('oculto', 'clicavel'); }
+    });
+  });
+
+  peer.on('error', e => {
+    if (e.type === 'peer-unavailable') {
+      if (String(e.message).includes(HUB)) agendarHub();
+      else for (const id of [...assistindo.keys()]) if (String(e.message).includes(id)) pararDeAssistir(id);
+    } else if (e.type === 'network' || e.type === 'server-error') {
+      toast('Conexão com o servidor caiu. Tentando de novo…', 'aviso');
+    }
+  });
+  peer.on('disconnected', () => setTimeout(() => { try { peer.reconnect(); } catch (e) {} }, 2000));
+  window.addEventListener('beforeunload', () => { try { peer.destroy(); } catch (e) {} try { hubPeer && hubPeer.destroy(); } catch (e) {} });
+}
+
+// já veio com ?sala= e tem nome salvo: entra direto
+if (params.get('sala') && ler('nome')) $('btnEntrar').click();
+</script>
+</body>
+</html>
