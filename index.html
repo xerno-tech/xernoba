@@ -90,6 +90,26 @@
   body.semChat #areaLista { max-height:none; flex:1; }
   .avatar.emoji { font-size:17px; }
   .avatar.foto { background-size:cover !important; background-position:center !important; color:transparent; }
+  .painelInfo { position:absolute; left:10px; bottom:56px; z-index:4; background:rgba(10,10,14,.82); border:1px solid rgba(255,255,255,.12); border-radius:10px;
+                padding:8px 10px; font-size:12px; line-height:1.55; font-variant-numeric:tabular-nums; min-width:190px; pointer-events:none; }
+  .painelInfo .lin { display:flex; justify-content:space-between; gap:14px; }
+  .painelInfo .lin span:first-child { color:var(--mut); }
+  .painelInfo .tit { display:flex; align-items:center; gap:6px; font-weight:600; margin-bottom:2px; }
+  .painelInfo .bola { width:8px; height:8px; border-radius:50%; background:var(--mut); }
+  .painelInfo .bola.bom { background:var(--ok); } .painelInfo .bola.medio { background:var(--aviso); } .painelInfo .bola.ruim { background:var(--live); }
+  .tela [data-a=info].ativo { background:var(--acc) !important; border-color:var(--acc) !important; }
+  #faixaMini .painelInfo, #faixaMini [data-a=info], #faixaMini [data-a=cinema] { display:none; }
+  /* modo cinema: a tela em tela cheia e o chat transparente por cima */
+  .tela.cinema #chat { position:absolute; top:16px; right:16px; bottom:70px; width:min(360px, 34vw); z-index:5; display:flex; flex-direction:column;
+                       background:transparent; border:0; border-radius:12px; transition:background .2s; }
+  .tela.cinema #chat h2 { display:none; }
+  .tela.cinema #msgs { justify-content:flex-end; mask-image:linear-gradient(transparent, #000 22%); -webkit-mask-image:linear-gradient(transparent, #000 22%); }
+  .tela.cinema #msgs .msg { text-shadow:0 1px 3px #000, 0 0 2px #000; animation:sumirCinema 12s forwards; }
+  .tela.cinema #chat:hover, .tela.cinema #chat:focus-within { background:rgba(14,14,18,.78); }
+  .tela.cinema #chat:hover .msg, .tela.cinema #chat:focus-within .msg { animation:none; opacity:1; }
+  .tela.cinema #formChat, .tela.cinema #digitando { opacity:.25; transition:opacity .2s; border-top:0; }
+  .tela.cinema #chat:hover #formChat, .tela.cinema #chat:focus-within #formChat, .tela.cinema #chat:hover #digitando { opacity:1; }
+  @keyframes sumirCinema { 0%, 75% { opacity:1; } 100% { opacity:0; } }
   .rabisco { position:absolute; inset:0; width:100%; height:100%; z-index:2; pointer-events:none; }
   .tela.desenhando .rabisco { pointer-events:auto; cursor:crosshair; }
   .tela .ctrl { z-index:4; }   /* botões sempre por cima do desenho */
@@ -579,7 +599,7 @@
 <script>
 const $ = id => document.getElementById(id);
 // Versão desta página. Sobe a cada atualização; quem estiver com uma mais antiga recebe o aviso.
-const VERSAO = 14;
+const VERSAO = 15;
 async function conferirVersao() {
   try {
     const txt = await fetch(location.pathname + '?v=' + Date.now(), { cache: 'no-store' }).then(r => r.text());
@@ -1354,6 +1374,8 @@ function entrar(nome, sala) {
         <button data-a="lapis" title="Rabiscar na tela">✏️</button>
         ${local ? '' : '<button data-a="clipe" title="Salvar os últimos 30 segundos">🎬</button>'}
         <button data-a="mini" title="Minimizar">🗕</button>
+        <button data-a="info" title="Painel de conexão">ⓘ</button>
+        <button data-a="cinema" title="Modo cinema (tela cheia com o chat por cima)">🍿</button>
         <button data-a="cheia" title="Tela cheia">⛶</button>${local ? '' : '<button data-a="fechar" title="Fechar">✕</button>'}
       </div>`;
     t.querySelector('.n').textContent = titulo;
@@ -1385,6 +1407,8 @@ function entrar(nome, sala) {
     }
     t.querySelector('[data-a=mini]').onclick = e => { e.stopPropagation(); minimizar(t, !t.classList.contains('mini')); };
     t.querySelector('[data-a=cheia]').onclick = () => document.fullscreenElement ? document.exitFullscreen() : t.requestFullscreen();
+    t.querySelector('[data-a=info]').onclick = e => { e.stopPropagation(); alternarPainel(t, id, local); };
+    t.querySelector('[data-a=cinema]').onclick = e => { e.stopPropagation(); entrarCinema(t); };
     const f = t.querySelector('[data-a=fechar]'); if (f) f.onclick = () => pararDeAssistir(id);
     v.ondblclick = () => t.querySelector('[data-a=cheia]').click();
     v.onclick = () => { if (t.classList.contains('mini')) minimizar(t, false); else if (layout === 'destaque') focar(t); };
@@ -1478,8 +1502,75 @@ function entrar(nome, sala) {
     try { it.conn.close(); } catch (e) {}
     if (it.tela._fonte) try { it.tela._fonte.disconnect(); it.tela._ganho.disconnect(); } catch (e) {}
     pararGravador(it.tela);
+    if (it.tela._painel) { clearInterval(it.tela._painel.tm); it.tela._painel = null; }
+    if (telaCinema === it.tela) sairCinema();
     it.tela.remove(); atualizarVazio(); renderLista();
   }
+
+  /* =================== PAINEL DE CONEXÃO =================== */
+  function alternarPainel(t, id, local) {
+    const b = t.querySelector('[data-a=info]');
+    if (t._painel) { clearInterval(t._painel.tm); t._painel.el.remove(); t._painel = null; b.classList.remove('ativo'); return; }
+    const el = document.createElement('div'); el.className = 'painelInfo'; el.innerHTML = '<div class="tit"><span class="bola"></span>Medindo…</div>';
+    t.appendChild(el); b.classList.add('ativo');
+    const ant = {};   // leituras anteriores, para calcular por segundo
+    const ler1 = async () => {
+      const pcs = local ? [...assistentes.values()].map(a => a.call && a.call.peerConnection).filter(Boolean)
+                        : [((assistindo.get(id) || {}).call || {}).peerConnection].filter(Boolean);
+      let w = 0, h = 0, fps = 0, bytes = 0, perd = 0, pacotes = 0, rtts = [], via = new Set();
+      for (const pc of pcs) {
+        let st; try { st = await pc.getStats(); } catch (e) { continue; }
+        const cand = {};
+        st.forEach(r => { if (r.type === 'local-candidate' || r.type === 'remote-candidate') cand[r.id] = r; });
+        st.forEach(r => {
+          if (r.kind === 'video' && r.type === (local ? 'outbound-rtp' : 'inbound-rtp')) {
+            w = Math.max(w, r.frameWidth || 0); h = Math.max(h, r.frameHeight || 0); fps = Math.max(fps, r.framesPerSecond || 0);
+            bytes += local ? (r.bytesSent || 0) : (r.bytesReceived || 0);
+            if (!local) { perd += r.packetsLost || 0; pacotes += (r.packetsReceived || 0) + (r.packetsLost || 0); }
+          }
+          if (r.type === 'candidate-pair' && r.nominated && r.state === 'succeeded') {
+            if (r.currentRoundTripTime != null) rtts.push(r.currentRoundTripTime * 1000);
+            const lc = cand[r.localCandidateId], rc = cand[r.remoteCandidateId];
+            via.add((lc && lc.candidateType === 'relay') || (rc && rc.candidateType === 'relay') ? 'retransmissão' : 'direta');
+          }
+        });
+      }
+      const agora = performance.now();
+      const mbps = ant.t ? ((bytes - ant.bytes) * 8 / ((agora - ant.t) / 1000)) / 1e6 : 0;
+      const perdaPct = ant.t && pacotes - ant.pacotes > 0 ? 100 * (perd - ant.perd) / (pacotes - ant.pacotes) : 0;
+      Object.assign(ant, { t: agora, bytes, perd, pacotes });
+      const rtt = rtts.length ? Math.round(rtts.reduce((a, b) => a + b) / rtts.length) : null;
+      const estado = !pcs.length ? '' : (rtt == null || rtt < 120) && perdaPct < 1 && fps >= 24 ? 'bom' : (rtt != null && rtt > 300) || perdaPct > 5 || (fps && fps < 12) ? 'ruim' : 'medio';
+      const lin = (k, v) => `<div class="lin"><span>${k}</span><span>${v}</span></div>`;
+      el.innerHTML = `<div class="tit"><span class="bola ${estado}"></span>${local ? (pcs.length ? `Enviando para ${pcs.length}` : 'Ninguém assistindo ainda') : 'Recebendo'}</div>`
+        + (pcs.length ? lin('Imagem', w ? `${w}×${h}` : '—') + lin('Quadros', fps ? `${Math.round(fps)} fps` : '—')
+          + lin(local ? 'Enviando' : 'Chegando', `${mbps.toFixed(1)} Mbps`) + lin('Atraso', rtt != null ? `${rtt} ms` : '—')
+          + (local ? '' : lin('Perda', `${perdaPct.toFixed(1)}%`)) + lin('Conexão', [...via].join(' / ') || '—') : '');
+    };
+    ler1();
+    t._painel = { el, tm: setInterval(ler1, 1000) };
+  }
+
+  /* =================== MODO CINEMA =================== */
+  // move o chat de verdade para dentro da tela em tela cheia; ao sair, ele volta para a barra lateral
+  let telaCinema = null;
+  async function entrarCinema(t) {
+    if (telaCinema) return sairCinema();
+    try { await t.requestFullscreen(); } catch (e) { return toast('O navegador não deixou entrar em tela cheia.', 'aviso'); }
+    telaCinema = t; t.classList.add('cinema');
+    t.appendChild($('chat'));
+    const box = $('msgs'); box.scrollTop = box.scrollHeight;
+  }
+  function sairCinema() {
+    if (!telaCinema) return;
+    telaCinema.classList.remove('cinema');
+    $('membros').appendChild($('chat'));
+    telaCinema = null;
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    const box = $('msgs'); box.scrollTop = box.scrollHeight;
+  }
+  document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && telaCinema) sairCinema(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && telaCinema && document.activeElement !== $('inChat')) sairCinema(); });
 
   /* =================== RABISCOS =================== */
   // As coordenadas vão de 0 a 1 em relação à imagem do vídeo (sem as faixas pretas),
@@ -2415,7 +2506,11 @@ function entrar(nome, sala) {
     pararExtras();
     stream = null; aoVivo = false;
     for (const a of assistentes.values()) if (a.call) try { a.call.close(); } catch (e) {}
-    if (telaLocal) { telaLocal.remove(); telaLocal = null; atualizarVazio(); }
+    if (telaLocal) {
+      if (telaCinema === telaLocal) sairCinema();
+      if (telaLocal._painel) { clearInterval(telaLocal._painel.tm); telaLocal._painel = null; }
+      telaLocal.remove(); telaLocal = null; atualizarVazio();
+    }
     atualizarAoVivo();
     enviarEstado();
   }
