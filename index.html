@@ -400,6 +400,7 @@
       <div class="campo">Cor do avatar <div class="cores" id="ajCores"></div></div>
       <div class="campo">Emoji no lugar da inicial <div class="emojis" id="ajEmojis"></div></div>
       <label class="marcar"><input type="checkbox" id="ajFoto"> Usar a minha foto do Discord no avatar</label>
+      <div class="rodape" id="ajDiscordBox" style="justify-content:flex-start"><button class="sec" id="ajRelogar">🔄 Atualizar meus dados do Discord</button></div>
     </div>
 
     <div class="passo oculto" data-painel="sons">
@@ -1352,10 +1353,13 @@ function entrar(nome, sala) {
       $('ajEmojis').appendChild(b);
     }
   }
+  // refaz o login no Discord (pega foto e nome novos) e volta para esta mesma sala
+  $('ajRelogar').onclick = () => { saindo = true; location.href = LOGIN_URL + '/login'; };
   $('ajFoto').onchange = () => { perfil.foto = $('ajFoto').checked; salvar('foto', perfil.foto ? '1' : '0'); enviarEstado(); };
   $('btnAjustes').onclick = () => {
     $('ajFoto').checked = perfil.foto;
     $('ajFoto').parentElement.classList.toggle('oculto', !LOGIN_URL);
+    $('ajDiscordBox').classList.toggle('oculto', !LOGIN_URL);
     $('ajNome').value = nome;
     desenharPerfil();
     document.querySelectorAll('[data-som]').forEach(c => c.checked = !!sons[c.dataset.som]);
