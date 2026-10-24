@@ -1,0 +1,345 @@
+// Midori Xernoba — telas de transmissão: grade, volume, minimizar, painel de conexão, cinema, rabiscos, clipes e reações
+/* ---- Telas na grade ---- */
+function criarTela(id, titulo, local) {
+  const t = document.createElement('div');
+  t.className = 'tela';
+  t.innerHTML = `<video autoplay playsinline ${local ? 'muted' : ''}></video>
+    <div class="aviso">Conectando…</div>
+    ${local ? '<span class="selo">VOCÊ · AO VIVO</span>' : ''}
+    <div class="ctrl"><span class="n"></span>
+      ${local ? '<span class="mut" style="font-size:12px">sem som pra você</span>' : '<button data-a="mute" title="Mutar esta transmissão">🔊</button><input type="range" min="0" max="2" step="0.05" value="1" title="Volume (até 200%)"><span class="pct">100%</span>'}
+      <button data-a="lapis" title="Rabiscar na tela">✏️</button>
+      ${local ? '' : '<button data-a="clipe" title="Salvar os últimos 30 segundos">🎬</button>'}
+      <button data-a="mini" title="Minimizar">🗕</button>
+      <button data-a="info" title="Painel de conexão">ⓘ</button>
+      <button data-a="cinema" title="Modo cinema (tela cheia com o chat por cima)">🍿</button>
+      <button data-a="chatCinema" title="Mostrar/esconder o chat (C)">💬</button>
+      <button data-a="cheia" title="Tela cheia">⛶</button>${local ? '' : '<button data-a="fechar" title="Fechar">✕</button>'}
+    </div>`;
+  t.querySelector('.n').textContent = titulo;
+  t._alvo = local ? null : id;
+  t._dono = local ? euId : id;   // de quem é a transmissão (para rabiscos)
+  prepararRabisco(t);
+  const fal = document.createElement('div'); fal.className = 'falantes'; t.appendChild(fal);
+  ultimoFalantes = '';   // força desenhar quem está falando nesta tela nova
+  const bClipe = t.querySelector('[data-a=clipe]');
+  if (bClipe) bClipe.onclick = e => { e.stopPropagation(); salvarClipe(t); };
+  if (!local) {
+    const bar = document.createElement('div'); bar.className = 'reacoes';
+    for (const e of REACOES) {
+      const b = document.createElement('button'); b.textContent = e; b.title = 'Reagir';
+      b.onclick = ev => { ev.stopPropagation(); if (hubConn && hubConn.open) hubConn.send({ tipo: 'reacao', alvo: id, emoji: e }); };
+      bar.appendChild(b);
+    }
+    t.appendChild(bar);
+  }
+  const v = t.querySelector('video');
+  const r = t.querySelector('input[type=range]');
+  t._chave = titulo;
+  if (r) {
+    r.value = Math.min(2, Number(ler('vol-' + titulo) || '1'));
+    t._mudo = ler('mute-' + titulo) === '1';
+    r.oninput = () => { salvar('vol-' + titulo, r.value); if (t._mudo && Number(r.value) > 0) definirMudo(t, false); aplicarSom(t); };
+    t.querySelector('[data-a=mute]').onclick = e => { e.stopPropagation(); definirMudo(t, !t._mudo); };
+    aplicarSom(t);
+  }
+  t.querySelector('[data-a=mini]').onclick = e => { e.stopPropagation(); minimizar(t, !t.classList.contains('mini')); };
+  t.querySelector('[data-a=cheia]').onclick = () => document.fullscreenElement ? document.exitFullscreen() : t.requestFullscreen();
+  t.querySelector('[data-a=info]').onclick = e => { e.stopPropagation(); alternarPainel(t, id, local); };
+  t.querySelector('[data-a=cinema]').onclick = e => { e.stopPropagation(); entrarCinema(t); };
+  t.querySelector('[data-a=chatCinema]').onclick = e => { e.stopPropagation(); alternarChatCinema(); };
+  const f = t.querySelector('[data-a=fechar]'); if (f) f.onclick = () => pararDeAssistir(id);
+  v.ondblclick = () => t.querySelector('[data-a=cheia]').click();
+  v.onclick = () => { if (t.classList.contains('mini')) minimizar(t, false); else if (layout === 'destaque') focar(t); };
+  if (local) $('grade').prepend(t); else $('grade').appendChild(t);
+  atualizarVazio(); atualizarFoco();
+  return t;
+}
+// ---- som de cada transmissão: passa por um ganho para poder ir até 200% ----
+let ctxTelas = null;
+function ligarSom(t, s) {
+  if (!s.getAudioTracks().length) return;
+  try {
+    ctxTelas = ctxTelas || new AudioContext();
+    ctxTelas.resume().catch(() => {});
+    if (t._fonte) try { t._fonte.disconnect(); } catch (e) {}
+    t._fonte = ctxTelas.createMediaStreamSource(s);
+    t._ganho = t._ganho || ctxTelas.createGain();
+    t._fonte.connect(t._ganho); t._ganho.connect(ctxTelas.destination);
+    t.querySelector('video').muted = true;   // o som sai pelo ganho, não pelo vídeo
+    aplicarSom(t);
+  } catch (e) { t._ganho = null; }
+}
+function aplicarSom(t) {
+  const r = t.querySelector('input[type=range]'); if (!r) return;
+  const vol = Number(r.value), v = t.querySelector('video');
+  const efetivo = t._mudo ? 0 : vol;
+  if (t._ganho) t._ganho.gain.value = efetivo;
+  else { v.muted = t._mudo; v.volume = Math.min(1, vol); }
+  t.querySelector('.pct').textContent = t._mudo ? 'mudo' : Math.round(vol * 100) + '%';
+  r.classList.toggle('alto', vol > 1);
+  const b = t.querySelector('[data-a=mute]');
+  b.textContent = t._mudo || vol === 0 ? '🔇' : '🔊';
+  b.classList.toggle('mudo', !!t._mudo);
+  b.title = t._mudo ? 'Desmutar' : 'Mutar esta transmissão';
+}
+function definirMudo(t, valor, temporario) {
+  t._mudo = valor;
+  if (!temporario) salvar('mute-' + t._chave, valor ? '1' : '0');
+  aplicarSom(t);
+}
+document.addEventListener('click', () => { if (ctxTelas && ctxTelas.state !== 'running') ctxTelas.resume().catch(() => {}); });
+
+// ---- minimizar ----
+let muteMini = ler('muteMini') === '1';
+function minimizar(t, sim) {
+  const destino = sim ? $('faixaMini') : $('grade');
+  t.classList.toggle('mini', sim);
+  t.classList.remove('foco');
+  t.style.width = t.style.height = '';   // a faixa usa o tamanho dela; o Flex-Grid recalcula ao voltar
+  destino.appendChild(t);
+  const v = t.querySelector('video'); v.play().catch(() => {});   // mover pausa o vídeo; volta a tocar
+  const b = t.querySelector('[data-a=mini]'); b.textContent = sim ? '🗖' : '🗕'; b.title = sim ? 'Voltar ao tamanho normal' : 'Minimizar';
+  if (t.querySelector('[data-a=mute]')) {
+    if (sim && muteMini && !t._mudo) { t._mutadoPorMini = true; definirMudo(t, true, true); }
+    if (!sim && t._mutadoPorMini) { t._mutadoPorMini = false; definirMudo(t, false, true); }
+  }
+  $('faixaMini').classList.toggle('oculto', !$('faixaMini').children.length);
+  if (!sim && layout === 'destaque') focar(t);
+  atualizarVazio();
+}
+
+function atualizarVazio() {
+  $('vazio').classList.toggle('oculto', document.querySelectorAll('#palco .tela').length > 0);
+  $('faixaMini').classList.toggle('oculto', !$('faixaMini').children.length);
+  atualizarFoco();
+  if (typeof arrumarFlex === 'function') requestAnimationFrame(arrumarFlex);
+}
+function focar(t) { $('grade').querySelectorAll('.tela').forEach(x => x.classList.toggle('foco', x === t)); }
+function atualizarFoco() {
+  const telas = [...$('grade').querySelectorAll('.tela')];
+  if (layout !== 'destaque') { telas.forEach(x => x.classList.remove('foco')); return; }
+  if (telas.some(x => x.classList.contains('foco'))) return;
+  // prefere a tela de um amigo; se não tiver, a sua
+  const alvo = telas.find(x => !x.querySelector('.selo')) || telas[0];
+  if (alvo) focar(alvo);
+}
+
+function assistir(m) {
+  if (assistindo.has(m.id)) return;
+  const tela = criarTela(m.id, m.nome, false);
+  const conn = peer.connect(m.id, { reliable: true, metadata: { tipo: 'assistir' } });
+  const item = { conn, call: null, tela };
+  assistindo.set(m.id, item);
+  conn.on('close', () => { if (assistindo.get(m.id) === item) pararDeAssistir(m.id); });
+  renderLista();
+}
+function pararDeAssistir(id) {
+  const it = assistindo.get(id); if (!it) return;
+  assistindo.delete(id);
+  try { it.call && it.call.close(); } catch (e) {}
+  try { it.conn.close(); } catch (e) {}
+  if (it.tela._fonte) try { it.tela._fonte.disconnect(); it.tela._ganho.disconnect(); } catch (e) {}
+  pararGravador(it.tela);
+  if (it.tela._painel) { clearInterval(it.tela._painel.tm); it.tela._painel = null; }
+  if (telaCinema === it.tela) sairCinema();
+  it.tela.remove(); atualizarVazio(); renderLista();
+}
+
+/* =================== PAINEL DE CONEXÃO =================== */
+function alternarPainel(t, id, local) {
+  const b = t.querySelector('[data-a=info]');
+  if (t._painel) { clearInterval(t._painel.tm); t._painel.el.remove(); t._painel = null; b.classList.remove('ativo'); return; }
+  const el = document.createElement('div'); el.className = 'painelInfo'; el.innerHTML = '<div class="tit"><span class="bola"></span>Medindo…</div>';
+  t.appendChild(el); b.classList.add('ativo');
+  const ant = {};   // leituras anteriores, para calcular por segundo
+  const ler1 = async () => {
+    const pcs = local ? [...assistentes.values()].map(a => a.call && a.call.peerConnection).filter(Boolean)
+                      : [((assistindo.get(id) || {}).call || {}).peerConnection].filter(Boolean);
+    let w = 0, h = 0, fps = 0, bytes = 0, perd = 0, pacotes = 0, rtts = [], via = new Set();
+    for (const pc of pcs) {
+      let st; try { st = await pc.getStats(); } catch (e) { continue; }
+      const cand = {};
+      st.forEach(r => { if (r.type === 'local-candidate' || r.type === 'remote-candidate') cand[r.id] = r; });
+      st.forEach(r => {
+        if (r.kind === 'video' && r.type === (local ? 'outbound-rtp' : 'inbound-rtp')) {
+          w = Math.max(w, r.frameWidth || 0); h = Math.max(h, r.frameHeight || 0); fps = Math.max(fps, r.framesPerSecond || 0);
+          bytes += local ? (r.bytesSent || 0) : (r.bytesReceived || 0);
+          if (!local) { perd += r.packetsLost || 0; pacotes += (r.packetsReceived || 0) + (r.packetsLost || 0); }
+        }
+        if (r.type === 'candidate-pair' && r.nominated && r.state === 'succeeded') {
+          if (r.currentRoundTripTime != null) rtts.push(r.currentRoundTripTime * 1000);
+          const lc = cand[r.localCandidateId], rc = cand[r.remoteCandidateId];
+          via.add((lc && lc.candidateType === 'relay') || (rc && rc.candidateType === 'relay') ? 'retransmissão' : 'direta');
+        }
+      });
+    }
+    const agora = performance.now();
+    const mbps = ant.t ? ((bytes - ant.bytes) * 8 / ((agora - ant.t) / 1000)) / 1e6 : 0;
+    const perdaPct = ant.t && pacotes - ant.pacotes > 0 ? 100 * (perd - ant.perd) / (pacotes - ant.pacotes) : 0;
+    Object.assign(ant, { t: agora, bytes, perd, pacotes });
+    const rtt = rtts.length ? Math.round(rtts.reduce((a, b) => a + b) / rtts.length) : null;
+    const estado = !pcs.length ? '' : (rtt == null || rtt < 120) && perdaPct < 1 && fps >= 24 ? 'bom' : (rtt != null && rtt > 300) || perdaPct > 5 || (fps && fps < 12) ? 'ruim' : 'medio';
+    const lin = (k, v) => `<div class="lin"><span>${k}</span><span>${v}</span></div>`;
+    el.innerHTML = `<div class="tit"><span class="bola ${estado}"></span>${local ? (pcs.length ? `Enviando para ${pcs.length}` : 'Ninguém assistindo ainda') : 'Recebendo'}</div>`
+      + (pcs.length ? lin('Imagem', w ? `${w}×${h}` : '—') + lin('Quadros', fps ? `${Math.round(fps)} fps` : '—')
+        + lin(local ? 'Enviando' : 'Chegando', `${mbps.toFixed(1)} Mbps`) + lin('Atraso', rtt != null ? `${rtt} ms` : '—')
+        + (local ? '' : lin('Perda', `${perdaPct.toFixed(1)}%`)) + lin('Conexão', [...via].join(' / ') || '—') : '');
+  };
+  ler1();
+  t._painel = { el, tm: setInterval(ler1, 1000) };
+}
+
+/* =================== MODO CINEMA =================== */
+// move o chat de verdade para dentro da tela em tela cheia; ao sair, ele volta para a barra lateral
+let telaCinema = null;
+async function entrarCinema(t) {
+  if (telaCinema) return sairCinema();
+  try { await t.requestFullscreen(); } catch (e) { return toast('O navegador não deixou entrar em tela cheia.', 'aviso'); }
+  telaCinema = t; t.classList.add('cinema'); t.classList.toggle('semChatCinema', !chatCinemaVisivel);
+  t.appendChild($('chat'));
+  const box = $('msgs'); box.scrollTop = box.scrollHeight;
+}
+let chatCinemaVisivel = ler('chatCinema') !== '0';
+function alternarChatCinema() {
+  chatCinemaVisivel = !chatCinemaVisivel; salvar('chatCinema', chatCinemaVisivel ? '1' : '0');
+  if (telaCinema) telaCinema.classList.toggle('semChatCinema', !chatCinemaVisivel);
+}
+function sairCinema() {
+  if (!telaCinema) return;
+  telaCinema.classList.remove('cinema', 'semChatCinema');
+  $('membros').appendChild($('chat'));
+  telaCinema = null;
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  const box = $('msgs'); box.scrollTop = box.scrollHeight;
+}
+document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && telaCinema) sairCinema(); });
+document.addEventListener('keydown', e => {
+  if (!telaCinema || document.activeElement === $('inChat')) return;
+  if (e.key === 'Escape') sairCinema();
+  else if (e.key === 'c' || e.key === 'C') alternarChatCinema();
+});
+
+/* =================== RABISCOS =================== */
+// As coordenadas vão de 0 a 1 em relação à imagem do vídeo (sem as faixas pretas),
+// para o desenho cair no mesmo lugar em telas de tamanhos diferentes.
+function areaVideo(t) {
+  const v = t.querySelector('video'), r = t.getBoundingClientRect();
+  const vw = v.videoWidth || 16, vh = v.videoHeight || 9;
+  const esc_ = Math.min(r.width / vw, r.height / vh);
+  const w = vw * esc_, h = vh * esc_;
+  return { x: r.left + (r.width - w) / 2, y: r.top + (r.height - h) / 2, w, h, r };
+}
+function prepararRabisco(t) {
+  const cv = document.createElement('canvas'); cv.className = 'rabisco';
+  t.insertBefore(cv, t.querySelector('.aviso'));
+  t._riscos = [];   // { autor, cor, pts: [[x,y]...], ate }
+  const b = t.querySelector('[data-a=lapis]');
+  b.onclick = e => { e.stopPropagation(); const on = !t.classList.contains('desenhando'); t.classList.toggle('desenhando', on); b.classList.toggle('ativo', on); };
+  t._pararDesenho = () => { t.classList.remove('desenhando'); b.classList.remove('ativo'); };
+  let desenhando = false, pend = [], novo = false, tm = null;
+  const enviar = () => {
+    if (!pend.length || !hubConn || !hubConn.open) { pend = []; return; }
+    hubConn.send({ tipo: 'risco', alvo: t._dono, pts: pend, novo }); pend = []; novo = false;
+  };
+  const ponto = e => { const a = areaVideo(t); return [+(((e.clientX - a.x) / a.w).toFixed(4)), +(((e.clientY - a.y) / a.h).toFixed(4))]; };
+  cv.addEventListener('pointerdown', e => { e.stopPropagation(); desenhando = true; novo = true; cv.setPointerCapture(e.pointerId); pend.push(ponto(e)); enviar(); tm = setInterval(enviar, 40); });
+  cv.addEventListener('pointermove', e => { if (desenhando) pend.push(ponto(e)); });
+  const fim = () => { if (!desenhando) return; desenhando = false; clearInterval(tm); enviar(); };
+  cv.addEventListener('pointerup', fim); cv.addEventListener('pointercancel', fim);
+  cv.addEventListener('click', e => e.stopPropagation());
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') document.querySelectorAll('.tela.desenhando').forEach(t => t._pararDesenho && t._pararDesenho()); });
+function telaDe(dono) { return dono === euId ? telaLocal : (assistindo.get(dono) || {}).tela; }
+function receberRisco(d) {
+  const t = telaDe(d.alvo); if (!t || !t._riscos) return;
+  let r = t._riscos.findLast ? t._riscos.findLast(x => x.autor === d.autor) : [...t._riscos].reverse().find(x => x.autor === d.autor);
+  if (d.novo || !r) { r = { autor: d.autor, cor: d.cor, pts: [] }; t._riscos.push(r); if (t._riscos.length > 80) t._riscos.shift(); }
+  r.pts.push(...d.pts); r.ate = Date.now() + 3500;
+  desenharRiscos();
+}
+let animando = false;
+function desenharRiscos() {
+  if (animando) return; animando = true;
+  const passo = () => {
+    let algum = false;
+    document.querySelectorAll('.tela').forEach(t => {
+      const cv = t.querySelector('.rabisco'); if (!cv || !t._riscos) return;
+      const r = t.getBoundingClientRect(), dpr = devicePixelRatio || 1;
+      if (cv.width !== Math.round(r.width * dpr) || cv.height !== Math.round(r.height * dpr)) { cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr); }
+      const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, r.width, r.height);
+      const a = areaVideo(t), ox = a.x - a.r.left, oy = a.y - a.r.top, agora = Date.now();
+      t._riscos = t._riscos.filter(x => x.ate > agora);
+      for (const x of t._riscos) {
+        algum = true;
+        g.globalAlpha = Math.min(1, (x.ate - agora) / 1000);
+        g.strokeStyle = x.cor; g.lineWidth = Math.max(3, a.w / 260); g.lineCap = g.lineJoin = 'round';
+        g.shadowColor = 'rgba(0,0,0,.6)'; g.shadowBlur = 3;
+        g.beginPath();
+        x.pts.forEach(([px, py], i) => { const X = ox + px * a.w, Y = oy + py * a.h; i ? g.lineTo(X, Y) : g.moveTo(X, Y); });
+        if (x.pts.length === 1) g.lineTo(ox + x.pts[0][0] * a.w + 0.1, oy + x.pts[0][1] * a.h);
+        g.stroke();
+      }
+    });
+    if (algum) requestAnimationFrame(passo); else animando = false;
+  };
+  requestAnimationFrame(passo);
+}
+
+/* =================== CLIPES (últimos 30 s) =================== */
+// Guarda o vídeo que chega em pedaços de 1 s e mantém só os últimos 30.
+let clipesLigados = ler('clipes') !== '0';
+function iniciarGravador(t, s) {
+  pararGravador(t);
+  if (!clipesLigados || typeof MediaRecorder === 'undefined') return;
+  const tipos = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+  const mime = tipos.find(x => MediaRecorder.isTypeSupported(x));
+  let rec;
+  try { rec = new MediaRecorder(s, { mimeType: mime, videoBitsPerSecond: 5000000, audioBitsPerSecond: 160000 }); } catch (e) { return; }
+  const g = { rec, mime, cabeca: null, pedacos: [], inicio: Date.now() };
+  rec.ondataavailable = ev => {
+    if (!ev.data || !ev.data.size) return;
+    if (!g.cabeca) { g.cabeca = ev.data; return; }   // o primeiro pedaço tem o cabeçalho do arquivo
+    g.pedacos.push(ev.data); if (g.pedacos.length > 30) g.pedacos.shift();
+  };
+  try { rec.start(1000); } catch (e) { return; }
+  t._grav = g;
+}
+function pararGravador(t) { if (t._grav) { try { t._grav.rec.stop(); } catch (e) {} t._grav = null; } }
+function salvarClipe(t) {
+  const g = t._grav;
+  if (!clipesLigados) return toast('Os clipes estão desligados em ⚙️ Ajustes → Layout.', 'aviso');
+  if (!g || !g.cabeca) return toast('Ainda não deu tempo de guardar nada. Espere alguns segundos.', 'aviso');
+  const blob = new Blob([g.cabeca, ...g.pedacos], { type: g.mime.split(';')[0] });
+  const seg = Math.min(30, Math.round((Date.now() - g.inicio) / 1000));
+  const quando = new Date().toLocaleString('pt-BR').replace(/[/:]/g, '-').replace(/, /, '_');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `midori-${(t._chave || 'clipe').replace(/[^\w-]+/g, '_')}-${quando}.webm`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  const b = t.querySelector('[data-a=clipe]'); b.classList.add('ativo'); setTimeout(() => b.classList.remove('ativo'), 600);
+  toast(`🎬 Clipe salvo (cerca de ${seg} s) na pasta de downloads.`);
+}
+
+// 12 min, 1h05…
+function duracao(ms) {
+  const min = Math.floor(Math.max(0, ms) / 60000);
+  if (min < 1) return 'agora';
+  if (min < 60) return min + ' min';
+  return Math.floor(min / 60) + 'h' + String(min % 60).padStart(2, '0');
+}
+
+/* =================== REAÇÕES =================== */
+function mostrarReacao(d) {
+  const tela = d.alvo === euId ? telaLocal : (assistindo.get(d.alvo) || {}).tela;
+  if (!tela || !REACOES.includes(d.emoji)) return;
+  if (tela.querySelectorAll('.flutua').length > 25) return;
+  const f = document.createElement('div'); f.className = 'flutua';
+  const b = document.createElement('b'); b.textContent = d.emoji;
+  const n = document.createElement('span'); n.textContent = d.nome || '';
+  f.append(b, n);
+  f.style.left = (10 + Math.random() * 75) + '%';
+  tela.appendChild(f);
+  setTimeout(() => f.remove(), 2500);
+}
