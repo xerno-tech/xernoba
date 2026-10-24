@@ -79,11 +79,70 @@ export default {
       return Response.json(dados ? { ok: true, id: dados.id, nome: dados.nome, avatar: dados.avatar || null, exp: dados.exp } : { ok: false }, { headers: cors });
     }
 
+    // 4) prévia de links do chat (título, descrição e imagem), só para quem está logado
+    if (url.pathname === '/preview' && req.method === 'POST') {
+      let corpo = {};
+      try { corpo = await req.json(); } catch (e) {}
+      if (!(await conferir(String(corpo.token || ''), env.DISCORD_CLIENT_SECRET))) return Response.json({ ok: false }, { headers: cors });
+      let alvo;
+      try { alvo = new URL(String(corpo.url || '')); } catch (e) { return Response.json({ ok: false }, { headers: cors }); }
+      if (!/^https?:$/.test(alvo.protocol) || /^(localhost|127\.|10\.|192\.168\.|169\.254\.|0\.)/.test(alvo.hostname)) return Response.json({ ok: false }, { headers: cors });
+
+      const cache = caches.default;
+      const chaveCache = new Request('https://preview.midori/' + encodeURIComponent(alvo.href));
+      const guardado = await cache.match(chaveCache);
+      if (guardado) return new Response(guardado.body, { headers: { ...cors, 'content-type': 'application/json' } });
+
+      let info = { ok: false };
+      try {
+        const r = await fetch(alvo.href, {
+          headers: { 'user-agent': 'Mozilla/5.0 (compatible; MidoriXernobaPreview/1.0)', accept: 'text/html,*/*;q=0.5', 'accept-language': 'pt-BR,pt;q=0.9,en;q=0.6' },
+          redirect: 'follow', signal: AbortSignal.timeout(5000),
+        });
+        if (r.ok && /text\/html/i.test(r.headers.get('content-type') || '')) {
+          const html = await lerInicio(r, 400000);
+          const meta = nome => {
+            const re = new RegExp(`<meta[^>]+(?:property|name)=["']${nome}["'][^>]*>`, 'i');
+            const tag = (html.match(re) || [])[0]; if (!tag) return '';
+            return entidades(((tag.match(/content=["']([^"']*)["']/i) || [])[1] || '').trim());
+          };
+          const titulo = meta('og:title') || meta('twitter:title') || entidades(((html.match(/<title[^>]*>([^<]*)<\/title>/i) || [])[1] || '').trim());
+          let imagem = meta('og:image') || meta('og:image:url') || meta('twitter:image');
+          const final = r.url || alvo.href;   // endereço depois de redirecionamentos
+          try { imagem = imagem ? new URL(imagem, final).href : ''; } catch (e) { imagem = ''; }
+          if (!/^https:/.test(imagem)) imagem = '';
+          if (titulo) info = {
+            ok: true, url: final,
+            site: (meta('og:site_name') || new URL(final).hostname.replace(/^www\./, '')).slice(0, 60),
+            titulo: titulo.slice(0, 200), descricao: (meta('og:description') || meta('description') || meta('twitter:description')).slice(0, 300),
+            imagem: imagem.slice(0, 1000), cor: (meta('theme-color') || '').slice(0, 20),
+          };
+        }
+      } catch (e) {}
+      const resp = JSON.stringify(info);
+      await cache.put(chaveCache, new Response(resp, { headers: { 'content-type': 'application/json', 'cache-control': `max-age=${info.ok ? 86400 : 3600}` } }));
+      return new Response(resp, { headers: { ...cors, 'content-type': 'application/json' } });
+    }
+
     return new Response('Midori Xernoba — login com Discord. Está funcionando.', { headers: { 'content-type': 'text/plain; charset=utf-8' } });
   },
 };
 
 const voltar = (site, fragmento) => Response.redirect(site + '#' + fragmento, 302);
+
+// lê só o começo da página (onde ficam as informações de prévia)
+async function lerInicio(resp, limite) {
+  const leitor = resp.body.getReader(); const dec = new TextDecoder(); let txt = '';
+  while (txt.length < limite) {
+    const { value, done } = await leitor.read(); if (done) break;
+    txt += dec.decode(value, { stream: true });
+    if (/<\/head>/i.test(txt)) break;
+  }
+  try { leitor.cancel(); } catch (e) {}
+  return txt;
+}
+const entidades = s => s.replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#0?39;|&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+  .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n))).replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)));
 
 const b64 = bytes => btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const deB64 = s => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));

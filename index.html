@@ -132,15 +132,19 @@
   .emojis { display:flex; flex-wrap:wrap; gap:4px; }
   .emojis button { background:var(--panel2); border:1px solid var(--linha); padding:4px 7px; font-size:18px; border-radius:8px; }
   .emojis button.sel { border-color:var(--acc); }
-  #membros { width:270px; flex-shrink:0; background:var(--panel); border-right:1px solid var(--linha); display:flex; flex-direction:column; min-height:0; }
+  :root { --fonteChat:15px; --larguraLateral:320px; }
+  #membros { width:var(--larguraLateral); flex-shrink:0; background:var(--panel); border-right:1px solid var(--linha); display:flex; flex-direction:column; min-height:0; position:relative; }
+  /* alça para arrastar a largura da barra lateral */
+  #alcaLateral { position:absolute; top:0; right:-4px; width:8px; height:100%; cursor:col-resize; z-index:6; }
+  #alcaLateral:hover, #alcaLateral.arrastando { background:linear-gradient(90deg, transparent 3px, var(--acc) 3px, var(--acc) 5px, transparent 5px); }
   #areaLista { padding:12px 10px; overflow:auto; max-height:45%; flex-shrink:0; }
   #chat { flex:1; display:flex; flex-direction:column; min-height:0; border-top:1px solid var(--linha); }
   #chat h2 { padding:12px 16px 0; }
-  #msgs { flex:1; overflow-y:auto; padding:4px 12px 8px; display:flex; flex-direction:column; gap:6px; font-size:13px; line-height:1.4; }
+  #msgs { flex:1; overflow-y:auto; padding:4px 14px 10px; display:flex; flex-direction:column; gap:8px; font-size:var(--fonteChat); line-height:1.45; }
   .msg { word-wrap:break-word; overflow-wrap:anywhere; }
   .msg .quem { font-weight:600; margin-right:5px; }
-  .msg .hora { font-size:10px; color:var(--mut); margin-right:6px; font-variant-numeric:tabular-nums; font-style:normal; }
-  .msg.sis { color:var(--mut); font-size:12px; font-style:italic; }
+  .msg .hora { font-size:.72em; color:var(--mut); margin-right:6px; font-variant-numeric:tabular-nums; font-style:normal; }
+  .msg.sis { color:var(--mut); font-size:.88em; font-style:italic; }
 
   #formChat { display:flex; gap:6px; padding:10px; border-top:1px solid var(--linha); }
   #formChat .icone { padding:6px 8px; font-size:12px; font-weight:700; }
@@ -148,11 +152,21 @@
   #chat.soltando::after { content:"Solte para enviar a imagem"; position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
                           background:rgba(47,191,113,.15); border:2px dashed var(--acc); color:var(--txt); font-size:14px; z-index:5; }
   .msg a { color:#6ee7a8; text-decoration:underline; word-break:break-all; }
+  .previa { display:flex; gap:10px; margin-top:6px; padding:8px 10px; background:var(--panel2); border:1px solid var(--linha);
+            border-left:3px solid var(--acc); border-radius:8px; text-decoration:none !important; color:var(--txt) !important; max-width:100%; }
+  .previa:hover { background:var(--panel3); }
+  .previa .tx { flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; }
+  .previa .site { font-size:11px; color:var(--mut); }
+  .previa .tit { font-size:13px; font-weight:600; color:#6ee7a8; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; word-break:normal; }
+  .previa .desc { font-size:12px; color:var(--mut); overflow:hidden; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; word-break:normal; }
+  .previa img { width:72px; height:72px; object-fit:cover; border-radius:6px; flex-shrink:0; background:var(--panel3); }
+  .previa.grande { flex-direction:column; }
+  .previa.grande img { width:100%; height:auto; max-height:170px; }
   .msg a:hover { color:#a7f3c9; }
   .msg img.anexo { display:block; max-width:100%; max-height:200px; border-radius:8px; margin-top:4px; cursor:zoom-in; background:var(--panel2); }
   #lightbox { position:fixed; inset:0; z-index:60; background:rgba(0,0,0,.85); display:flex; align-items:center; justify-content:center; cursor:zoom-out; padding:20px; }
   #lightbox img { max-width:100%; max-height:100%; border-radius:8px; }
-  #formChat input { flex:1; padding:8px 10px; }
+  #formChat input { flex:1; padding:9px 11px; font-size:var(--fonteChat); }
   #formChat button { padding:8px 12px; }
   #membros h2 { font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--mut); margin:2px 6px 10px; font-weight:600; }
   .membro { display:flex; align-items:center; gap:10px; padding:7px 8px; border-radius:9px; }
@@ -173,8 +187,8 @@
   button.mudo { background:var(--panel2); border:1px solid rgba(255,77,94,.6); color:#ff8f9a; }
   .avatar.live::after { content:""; position:absolute; right:-1px; bottom:-1px; width:10px; height:10px; border-radius:50%; background:var(--live); border:2px solid var(--panel); }
   .membro .info { flex:1; min-width:0; display:flex; flex-direction:column; }
-  .membro .n { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:14px; }
-  .membro .s { font-size:11px; color:var(--mut); }
+  .membro .n { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:15px; }
+  .membro .s { font-size:12px; color:var(--mut); }
   .membro .s.live { color:#ff8f9a; }
   .membro button { padding:5px 11px; font-size:12px; }
 
@@ -243,6 +257,7 @@
     #barra { flex-wrap:wrap; }
     .marca { display:none; }
     #corpo { flex-direction:column; }
+    #alcaLateral { display:none; }
     #membros { width:auto; height:42vh; border-right:0; border-bottom:1px solid var(--linha); }
     #grade { grid-template-columns:1fr; }
     .tela .ctrl { opacity:1; }
@@ -313,6 +328,7 @@
   </div>
   <div id="corpo">
     <div id="membros">
+      <div id="alcaLateral" title="Arraste para mudar a largura (dois cliques volta ao normal)"></div>
       <div id="areaLista"><h2 id="tituloMembros">Na sala</h2><div id="lista"></div></div>
       <div id="chat">
         <h2>Chat</h2>
@@ -446,6 +462,10 @@
         <span class="mut" style="font-size:12px"><b>Flex-Grid:</b> arruma as telas sozinho, todas no maior tamanho possível. <b>Grade:</b> o jeito antigo. <b>Destaque:</b> uma grande e as outras pequenas embaixo.</span>
       </div>
       <label class="marcar"><input type="checkbox" id="ajChat"> Mostrar o chat</label>
+      <div class="campo">Tamanho do texto do chat
+        <div class="segmentado" id="segFonte"><button data-t="13">Pequeno</button><button data-t="15">Médio</button><button data-t="17">Grande</button><button data-t="19">Enorme</button></div>
+        <span class="mut" style="font-size:12px">A largura da barra lateral muda arrastando a borda dela.</span>
+      </div>
       <label class="marcar"><input type="checkbox" id="ajMuteMini"> Mutar a transmissão quando eu minimizar</label>
       <label class="marcar"><input type="checkbox" id="ajClipes"> Guardar os últimos 30 segundos de quem eu assisto (para o botão 🎬). Desligue se o PC ficar pesado.</label>
     </div>
@@ -480,7 +500,7 @@
 <script>
 const $ = id => document.getElementById(id);
 // Versão desta página. Sobe a cada atualização; quem estiver com uma mais antiga recebe o aviso.
-const VERSAO = 6;
+const VERSAO = 8;
 async function conferirVersao() {
   try {
     const txt = await fetch(location.pathname + '?v=' + Date.now(), { cache: 'no-store' }).then(r => r.text());
@@ -1591,9 +1611,62 @@ function entrar(nome, sala) {
   $('ajMuteMini').onchange = () => { muteMini = $('ajMuteMini').checked; salvar('muteMini', muteMini ? '1' : '0'); };
   aplicarLayout();
 
+  // ---- tamanho do texto do chat e largura da barra lateral ----
+  const raiz = document.documentElement.style;
+  let fonteChat = ler('fonteChat') || '15';
+  raiz.setProperty('--fonteChat', fonteChat + 'px');
+  seg('segFonte', 't', fonteChat, v => { fonteChat = v; salvar('fonteChat', v); raiz.setProperty('--fonteChat', v + 'px'); });
+  const largSalva = Number(ler('larguraLateral'));
+  if (largSalva) raiz.setProperty('--larguraLateral', largSalva + 'px');
+  (() => {
+    const alca = $('alcaLateral');
+    let ini = 0, largIni = 0;
+    const mover = e => {
+      const w = Math.max(240, Math.min(Math.min(560, innerWidth * 0.5), largIni + (e.clientX - ini)));
+      raiz.setProperty('--larguraLateral', w + 'px');
+    };
+    const soltar = () => {
+      alca.classList.remove('arrastando'); document.body.style.userSelect = '';
+      removeEventListener('pointermove', mover); removeEventListener('pointerup', soltar);
+      salvar('larguraLateral', Math.round($('membros').getBoundingClientRect().width));
+    };
+    alca.addEventListener('pointerdown', e => {
+      e.preventDefault(); ini = e.clientX; largIni = $('membros').getBoundingClientRect().width;
+      alca.classList.add('arrastando'); document.body.style.userSelect = 'none';
+      addEventListener('pointermove', mover); addEventListener('pointerup', soltar);
+    });
+    alca.addEventListener('dblclick', () => { raiz.setProperty('--larguraLateral', '320px'); salvar('larguraLateral', ''); });
+  })();
+
   /* =================== CHAT =================== */
   const vistas = new Set(); let naoLidas = 0;
   const hora = ts => new Date(ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  // ---- prévia de links (busca pelo servidor de login, com cache aqui também) ----
+  const previas = new Map();
+  function pedirPrevia(url) {
+    if (!LOGIN_URL || !tokenLogin) return Promise.resolve(null);
+    if (!previas.has(url)) previas.set(url, fetch(LOGIN_URL + '/preview', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: tokenLogin, url }) })
+      .then(r => r.json()).then(p => p && p.ok ? p : null).catch(() => null));
+    return previas.get(url);
+  }
+  function cartaoPrevia(p) {
+    const a = document.createElement('a'); a.className = 'previa'; a.target = '_blank'; a.rel = 'noopener noreferrer';
+    try { const u = new URL(p.url); if (/^https?:$/.test(u.protocol)) a.href = u.href; } catch (e) {}
+    if (/^#[0-9a-f]{3,8}$/i.test(p.cor || '')) a.style.borderLeftColor = p.cor;
+    const tx = document.createElement('div'); tx.className = 'tx';
+    const site = document.createElement('span'); site.className = 'site'; site.textContent = p.site || '';
+    const tit = document.createElement('span'); tit.className = 'tit'; tit.textContent = p.titulo || '';
+    tx.append(site, tit);
+    if (p.descricao) { const d = document.createElement('span'); d.className = 'desc'; d.textContent = p.descricao; tx.append(d); }
+    a.append(tx);
+    if (/^https:\/\//.test(p.imagem || '')) {
+      const im = document.createElement('img'); im.src = p.imagem; im.alt = ''; im.loading = 'lazy'; im.referrerPolicy = 'no-referrer';
+      im.onerror = () => im.remove();
+      // vídeos (YouTube, Twitch…) ganham a imagem grande embaixo, como no Discord
+      if (/youtube\.com|youtu\.be|twitch\.tv|vimeo\.com/i.test(p.url)) { a.classList.add('grande'); a.append(im); } else a.append(im);
+    }
+    return a;
+  }
   // texto com links clicáveis (montado elemento por elemento, nunca como HTML)
   function preencherComLinks(el, texto) {
     const re = /\bhttps?:\/\/[^\s<>"']+/gi;
@@ -1625,6 +1698,9 @@ function entrar(nome, sala) {
       // link sozinho de GIF/imagem vira imagem
       const soLink = !m.img && imagemValida((m.texto || '').trim()) && !m.texto.trim().startsWith('data:') ? m.texto.trim() : null;
       const src = imagemValida(m.img) ? m.img : soLink;
+      // prévia do primeiro link que não for imagem
+      const link = !src && (t.querySelector('a') || {}).href;
+      if (link) pedirPrevia(link).then(p => { if (p) { div.appendChild(cartaoPrevia(p)); if (noFim || m.id === euId) box.scrollTop = box.scrollHeight; } });
       if (src) {
         if (soLink) t.textContent = '';
         const im = document.createElement('img'); im.className = 'anexo'; im.src = src; im.alt = 'imagem'; im.loading = 'lazy';
