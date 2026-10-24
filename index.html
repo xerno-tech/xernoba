@@ -174,6 +174,12 @@
   .msg .chips { display:flex; flex-wrap:wrap; gap:4px; margin-top:3px; }
   .msg .chips button { padding:1px 7px; font-size:.8em; border-radius:999px; background:var(--panel2); border:1px solid var(--linha); color:var(--txt); }
   .msg .chips button.meu { border-color:var(--acc); background:rgba(47,191,113,.15); }
+  #digitando { min-height:18px; padding:0 14px 2px; font-size:12px; color:var(--mut); font-style:italic; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #digitando b { color:var(--txt); font-style:normal; }
+  #digitando .pontos::after { content:'…'; animation:pontos 1.2s steps(3) infinite; }
+  @keyframes pontos { 0% { content:'.'; } 33% { content:'..'; } 66% { content:'...'; } }
+  #btnTts.ativo { background:var(--acc); border-color:var(--acc); }
+  .msg .ttsIc { font-size:.8em; margin-left:4px; opacity:.7; }
   #barraResposta { display:flex; align-items:center; gap:8px; padding:6px 12px; font-size:12px; color:var(--mut); border-top:1px solid var(--linha); background:var(--panel2); }
   #barraResposta span { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   #barraResposta b { color:var(--txt); }
@@ -375,10 +381,12 @@
       <div id="chat">
         <h2>Chat</h2>
         <div id="msgs"></div>
+        <div id="digitando"></div>
         <div id="popMencao" class="oculto"></div>
         <div id="barraResposta" class="oculto"><span id="txtResposta"></span><button class="link" id="btnCancResp" title="Cancelar">✕</button></div>
         <form id="formChat" autocomplete="off">
           <button type="button" class="sec icone" id="btnAnexo" title="Enviar imagem ou GIF do PC">📎</button>
+          <button type="button" class="sec icone" id="btnTts" title="Modo TTS: suas mensagens são lidas em voz alta para quem está na voz">🗣️</button>
           <input type="text" id="inChat" maxlength="300" placeholder="Mensagem, ou cole uma imagem…">
           <button type="submit" title="Enviar">➤</button>
           <input type="file" id="arqImg" accept="image/*" hidden>
@@ -496,6 +504,18 @@
       <label class="marcar"><input type="checkbox" data-som="live"> Alguém começou a transmitir</label>
       <label class="marcar"><input type="checkbox" data-som="voz"> Alguém entrou ou saiu da voz</label>
       <label class="campo">Volume dos sons <input type="range" id="ajVolSom" min="0" max="1" step="0.05" style="accent-color:var(--acc)"></label>
+      <div class="campo" style="margin-top:6px">🗣️ Leitura em voz alta (TTS)
+        <label class="marcar"><input type="checkbox" id="ajTtsOuvir"> Ouvir as mensagens TTS dos outros (quando eu estiver na voz)</label>
+        <label class="marcar"><input type="checkbox" id="ajTtsAoVivo"> Não ler enquanto eu transmito a tela inteira (para a leitura não ir junto)</label>
+        <select id="ajTtsVoz"></select>
+        <div style="display:flex;gap:10px;align-items:center">
+          <span class="mut" style="font-size:12px;min-width:56px">Volume</span><input type="range" id="ajTtsVol" min="0" max="1" step="0.05" style="flex:1;accent-color:var(--acc)">
+        </div>
+        <div style="display:flex;gap:10px;align-items:center">
+          <span class="mut" style="font-size:12px;min-width:56px">Velocidade</span><input type="range" id="ajTtsVel" min="0.7" max="1.6" step="0.05" style="flex:1;accent-color:var(--acc)">
+        </div>
+        <div class="rodape" style="justify-content:flex-start"><button class="sec" id="ajTtsTestar">🗣️ Testar voz</button></div>
+      </div>
       <label class="marcar"><input type="checkbox" id="ajNotif"> Avisar no Windows quando a aba estiver em segundo plano (mensagens e transmissões)</label>
       <div class="rodape"><button class="sec" id="ajTestarSom">🔔 Testar som</button></div>
     </div>
@@ -544,7 +564,7 @@
 <script>
 const $ = id => document.getElementById(id);
 // Versão desta página. Sobe a cada atualização; quem estiver com uma mais antiga recebe o aviso.
-const VERSAO = 9;
+const VERSAO = 10;
 async function conferirVersao() {
   try {
     const txt = await fetch(location.pathname + '?v=' + Date.now(), { cache: 'no-store' }).then(r => r.text());
@@ -670,7 +690,7 @@ function entrar(nome, sala) {
   const HUB = 'telinha-hub-' + sala;
 
   let peer = null, hubPeer = null, hubConn = null, euId = null, saindo = false, avisoDoHub = null;
-  let ausente = false;
+  let ausente = false, inicioLive = 0;
   const miniaturasRec = new Map();   // miniaturas recebidas de quem está ao vivo
   let regrasSala = {}, senhaSala = null, bloqueado = false, silenciadoAdmin = false;
   let adminKey = ler('adminKey') || null;
@@ -766,6 +786,7 @@ function entrar(nome, sala) {
           const admin = !!(ADMIN_HASH && d.adminKey && await sha256(String(d.adminKey)) === ADMIN_HASH);
           const m = { id: c.peer, cid: ccid, nome: String(d.nome).slice(0, 24), live: !!d.live, voz: !!d.voz, mudo: !!d.mudo || silenciados.has(ccid),
                       ausente: !!d.ausente && !d.live,
+                      liveMs: d.live ? Math.max(0, Math.min(Number(d.liveMs) || 0, 7 * 864e5)) : 0,
                       silenciado: silenciados.has(ccid), admin,
                       foto: d.usarFoto && disc && disc.id && disc.avatar ? `https://cdn.discordapp.com/avatars/${disc.id}/${disc.avatar}.png?size=64` : null,
                       cor: /^#[0-9a-f]{6}$/i.test(d.cor || '') ? d.cor : null, emoji: d.emoji ? String(d.emoji).slice(0, 8) : null };
@@ -791,6 +812,9 @@ function entrar(nome, sala) {
           }
           if (!m.live) miniaturas.delete(c.peer);
           difundir();
+        } else if (d.tipo === 'digitando') {
+          const m = roster.get(c.peer); if (!m) return;
+          for (const [xid, x] of conns) if (xid !== c.peer && x.open) try { x.send({ tipo: 'digitando', id: c.peer, nome: m.nome }); } catch (e) {}
         } else if (d.tipo === 'thumb') {
           const m = roster.get(c.peer);
           if (!m || !m.live || typeof d.img !== 'string' || !/^data:image\/(jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(d.img) || d.img.length > 40000) return;
@@ -862,7 +886,10 @@ function entrar(nome, sala) {
           // resposta: guarda um trechinho da mensagem original
           const orig = d.resp && historico.find(x => x.uid === d.resp && x.nome);
           const resp = orig ? { uid: orig.uid, nome: orig.nome, trecho: (orig.texto || (orig.img ? '🖼️ imagem' : '')).slice(0, 90) } : null;
-          registrar(texto, m.nome, c.peer, 'msg', c.peer, m.cor, img, resp ? { resp } : null);
+          // TTS: só texto, e no máximo uma leitura a cada 2 s por pessoa
+          let tts = false;
+          if (d.tts && texto && Date.now() - (m._ultimoTts || 0) > 2000) { tts = true; m._ultimoTts = Date.now(); }
+          registrar(texto, m.nome, c.peer, 'msg', c.peer, m.cor, img, Object.assign({}, resp ? { resp } : {}, tts ? { tts: true } : {}));
         }
       });
       const sair = () => sairDe(c.peer);
@@ -881,9 +908,10 @@ function entrar(nome, sala) {
     hubConn.on('open', enviarEstado);
     hubConn.on('data', d => {
       if (!d) return;
-      if (d.tipo === 'lista') { membros = d.membros; if (d.regras) regrasSala = d.regras; renderLista(); atualizarAdminUI(); atualizarEspectadores(); }
+      if (d.tipo === 'lista') { for (const m of d.membros) if (m.live) m._inicioLocal = Date.now() - (m.liveMs || 0); membros = d.membros; if (d.regras) regrasSala = d.regras; renderLista(); atualizarAdminUI(); atualizarEspectadores(); }
       else if (d.tipo === 'thumb') { miniaturasRec.set(d.id, d.img); const im = document.querySelector(`img.miniatura[data-thumb="${CSS.escape(d.id)}"]`); if (im) im.src = d.img; else renderLista(); }
       else if (d.tipo === 'reacoesMsg') { atualizarChips(d.uid, d.reacoes); }
+      else if (d.tipo === 'digitando') { digitandoAgora.set(d.id, { nome: d.nome, ate: Date.now() + 4000 }); mostrarDigitando(); }
       else if (d.tipo === 'reacao') { mostrarReacao(d); }
       else if (d.tipo === 'risco') { receberRisco(d); }
       else if (d.tipo === 'expulso') { bloquear('expulso'); }
@@ -903,7 +931,7 @@ function entrar(nome, sala) {
   let jaEntrei = false;
   function enviarEstado() {
     if (!hubConn || !hubConn.open) return;
-    hubConn.send({ tipo: 'estado', nome, live: aoVivo, voz: emVoz, mudo: emVoz && mudo, cor: perfil.cor, emoji: perfil.emoji, voltando: jaEntrei, ausente,
+    hubConn.send({ tipo: 'estado', nome, live: aoVivo, voz: emVoz, mudo: emVoz && mudo, cor: perfil.cor, emoji: perfil.emoji, voltando: jaEntrei, ausente, liveMs: aoVivo && inicioLive ? Date.now() - inicioLive : 0,
                    cid, senha: senhaSala, adminKey, token: tokenLogin, usarFoto: perfil.foto });
     jaEntrei = true;
   }
@@ -920,7 +948,7 @@ function entrar(nome, sala) {
       const eu = m.id === euId;
       const div = document.createElement('div');
       div.className = 'membro';
-      const status = m.live ? 'Ao vivo' : m.ausente ? '🌙 Ausente' : m.voz ? (m.mudo ? 'Na voz · mudo' : 'Na voz') : 'Assistindo';
+      const status = m.live ? 'Ao vivo' + (m._inicioLocal ? ' · ' + duracao(Date.now() - m._inicioLocal) : '') : m.ausente ? '🌙 Ausente' : m.voz ? (m.mudo ? 'Na voz · mudo' : 'Na voz') : 'Assistindo';
       div.innerHTML = `${avatarHTML(m, (m.live ? 'live' : '') + (m.ausente ? ' ausente' : ''))}
         <div class="info"><span class="n">${esc(m.nome)}${m.admin ? '<span class="escudo" title="Admin">🛡️</span>' : ''}${eu ? ' <span class="mut">(você)</span>' : ''}</span>
         <span class="s ${m.live ? 'live' : ''}">${status}</span></div>
@@ -1512,6 +1540,79 @@ function entrar(nome, sala) {
     toast(`🎬 Clipe salvo (cerca de ${seg} s) na pasta de downloads.`);
   }
 
+  // 12 min, 1h05…
+  function duracao(ms) {
+    const min = Math.floor(Math.max(0, ms) / 60000);
+    if (min < 1) return 'agora';
+    if (min < 60) return min + ' min';
+    return Math.floor(min / 60) + 'h' + String(min % 60).padStart(2, '0');
+  }
+
+  /* =================== DIGITANDO =================== */
+  const digitandoAgora = new Map();
+  function mostrarDigitando() {
+    const agora = Date.now();
+    for (const [id, x] of digitandoAgora) if (x.ate < agora || !membros.some(m => m.id === id)) digitandoAgora.delete(id);
+    const nomes = [...digitandoAgora.values()].map(x => x.nome);
+    const el = $('digitando'); el.innerHTML = '';
+    if (!nomes.length) return;
+    const b = n => Object.assign(document.createElement('b'), { textContent: n });
+    if (nomes.length === 1) el.append(b(nomes[0]), ' está digitando');
+    else if (nomes.length === 2) el.append(b(nomes[0]), ' e ', b(nomes[1]), ' estão digitando');
+    else el.append('Várias pessoas estão digitando');
+    el.append(Object.assign(document.createElement('span'), { className: 'pontos' }));
+  }
+  setInterval(mostrarDigitando, 1000);
+  let ultimoDigitando = 0;
+  $('inChat').addEventListener('input', () => {
+    if (!$('inChat').value.trim() || Date.now() - ultimoDigitando < 2500 || !hubConn || !hubConn.open) return;
+    ultimoDigitando = Date.now(); hubConn.send({ tipo: 'digitando' });
+  });
+
+  /* =================== TTS (ler mensagens em voz alta) =================== */
+  let ttsLigado = ler('ttsLigado') === '1';
+  let ttsOuvir = ler('ttsOuvir') !== '0', ttsAoVivo = ler('ttsAoVivo') !== '0';
+  let ttsVol = Number(ler('ttsVol') || '1'), ttsVel = Number(ler('ttsVel') || '1.1'), ttsVoz = ler('ttsVoz') || '';
+  const temTts = 'speechSynthesis' in window;
+  function vozesPt() {
+    const vs = temTts ? speechSynthesis.getVoices() : [];
+    return [...vs.filter(v => /^pt/i.test(v.lang)), ...vs.filter(v => !/^pt/i.test(v.lang))];
+  }
+  function preencherVozes() {
+    const sel = $('ajTtsVoz'); sel.innerHTML = '';
+    const auto = document.createElement('option'); auto.value = ''; auto.textContent = 'Voz automática (português)'; sel.appendChild(auto);
+    for (const v of vozesPt()) { const o = document.createElement('option'); o.value = v.name; o.textContent = `${v.name} (${v.lang})`; sel.appendChild(o); }
+    sel.value = [...sel.options].some(o => o.value === ttsVoz) ? ttsVoz : '';
+  }
+  if (temTts) speechSynthesis.onvoiceschanged = preencherVozes;
+  function falar(texto) {
+    if (!temTts || !texto) return;
+    const u = new SpeechSynthesisUtterance(texto.slice(0, 220));
+    const vs = vozesPt();
+    u.voice = vs.find(v => v.name === ttsVoz) || vs.find(v => /^pt-BR/i.test(v.lang)) || vs[0] || null;
+    u.lang = (u.voice && u.voice.lang) || 'pt-BR';
+    u.volume = ttsVol; u.rate = ttsVel;
+    speechSynthesis.speak(u);   // o navegador já põe em fila: uma leitura não fala por cima da outra
+  }
+  function lerMensagem(m) {
+    if (!m.tts || !ttsOuvir || !emVoz) return;
+    if (ttsAoVivo && aoVivo && fonte !== 'console') return;   // transmitindo a tela: não lê, para não ir junto
+    const t = (m.texto || '').replace(/https?:\/\/\S+/g, 'link').replace(/\s+/g, ' ').trim();
+    if (t) falar(`${m.nome}: ${t}`);
+  }
+  function atualizarBotaoTts() {
+    $('btnTts').classList.toggle('ativo', ttsLigado);
+    $('btnTts').title = ttsLigado ? 'Modo TTS ligado: suas mensagens são lidas em voz alta para quem está na voz (clique para desligar)'
+                                  : 'Modo TTS: suas mensagens são lidas em voz alta para quem está na voz';
+    $('inChat').placeholder = ttsLigado ? '🗣️ Mensagem (vai ser lida em voz alta)…' : 'Mensagem, ou cole uma imagem…';
+  }
+  $('btnTts').onclick = () => {
+    if (!temTts) return toast('Este navegador não tem leitura em voz alta.', 'aviso');
+    ttsLigado = !ttsLigado; salvar('ttsLigado', ttsLigado ? '1' : '0'); atualizarBotaoTts();
+    toast(ttsLigado ? '🗣️ Modo TTS ligado. Quem estiver na voz vai ouvir suas mensagens.' : 'Modo TTS desligado.', '', 4000);
+  };
+  atualizarBotaoTts();
+
   /* =================== AUSENTE (10 min sem mexer) =================== */
   let ultimaAtividade = Date.now();
   const mexeu = () => { ultimaAtividade = Date.now(); if (ausente) { ausente = false; enviarEstado(); } };
@@ -1668,6 +1769,7 @@ function entrar(nome, sala) {
     document.querySelectorAll('[data-som]').forEach(c => c.checked = !!sons[c.dataset.som]);
     $('ajVolSom').value = volSom;
     $('ajNotif').checked = notif && 'Notification' in window && Notification.permission === 'granted';
+    $('ajTtsOuvir').checked = ttsOuvir; $('ajTtsAoVivo').checked = ttsAoVivo; $('ajTtsVol').value = ttsVol; $('ajTtsVel').value = ttsVel; preencherVozes();
     $('ajChat').checked = mostrarChat;
     $('ajMuteMini').checked = muteMini;
     $('ajClipes').checked = clipesLigados;
@@ -1691,6 +1793,12 @@ function entrar(nome, sala) {
   $('ajVolSom').oninput = () => { volSom = Number($('ajVolSom').value); salvar('volSom', volSom); };
   $('ajVolSom').onchange = () => tocar('teste');
   $('ajTestarSom').onclick = () => tocar('teste');
+  $('ajTtsOuvir').onchange = () => { ttsOuvir = $('ajTtsOuvir').checked; salvar('ttsOuvir', ttsOuvir ? '1' : '0'); if (!ttsOuvir && temTts) speechSynthesis.cancel(); };
+  $('ajTtsAoVivo').onchange = () => { ttsAoVivo = $('ajTtsAoVivo').checked; salvar('ttsAoVivo', ttsAoVivo ? '1' : '0'); };
+  $('ajTtsVoz').onchange = () => { ttsVoz = $('ajTtsVoz').value; salvar('ttsVoz', ttsVoz); };
+  $('ajTtsVol').oninput = () => { ttsVol = Number($('ajTtsVol').value); salvar('ttsVol', ttsVol); };
+  $('ajTtsVel').oninput = () => { ttsVel = Number($('ajTtsVel').value); salvar('ttsVel', ttsVel); };
+  $('ajTtsTestar').onclick = () => { if (!temTts) return toast('Este navegador não tem leitura em voz alta.', 'aviso'); speechSynthesis.cancel(); falar(`${nome}: testando a voz da Midori Xernoba`); };
   $('ajNotif').onchange = async () => {
     if ($('ajNotif').checked) {
       if (!('Notification' in window)) { toast('Este navegador não tem notificações.', 'aviso'); $('ajNotif').checked = false; return; }
@@ -1839,7 +1947,11 @@ function entrar(nome, sala) {
     if (!m || !m.uid || vistas.has(m.uid)) return;   // evita repetir quando o hub muda
     vistas.add(m.uid);
     const meChamaram = mencionaMe(m);
-    if (!doHistorico) { if (meChamaram) avisarMencao(m); else avisarEvento(m); }
+    if (!doHistorico) {
+      if (meChamaram) avisarMencao(m); else if (!m.tts || !emVoz) avisarEvento(m);   // TTS lido na voz não precisa do bip
+      if (m.id) { digitandoAgora.delete(m.id); mostrarDigitando(); }
+      lerMensagem(m);
+    }
     const box = $('msgs');
     const noFim = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
     const div = document.createElement('div');
@@ -1858,6 +1970,7 @@ function entrar(nome, sala) {
       const q = document.createElement('span'); q.className = 'quem'; q.style.color = m.cor ? clarear(m.cor) : corDe(m.nome).replace('45%', '68%'); q.textContent = m.nome;
       const t = document.createElement('span'); preencherComLinks(t, m.texto || '');
       div.append(h, q, t);
+      if (m.tts) div.appendChild(Object.assign(document.createElement('span'), { className: 'ttsIc', textContent: '🗣️', title: 'Mensagem lida em voz alta' }));
       // botões que aparecem ao passar o mouse: responder e reagir
       const acoes = document.createElement('div'); acoes.className = 'acoesMsg';
       const bR = document.createElement('button'); bR.textContent = '↩'; bR.title = 'Responder'; bR.onclick = e => { e.stopPropagation(); responder(m); };
@@ -1916,7 +2029,7 @@ function entrar(nome, sala) {
   }
   function enviarChat(texto, img) {
     if (!hubConn || !hubConn.open) { toast('Ainda conectando à sala… tente de novo em instantes.', 'aviso'); return false; }
-    hubConn.send({ tipo: 'chat', texto: (texto || '').slice(0, 300), img: img || null, resp: respondendo });
+    hubConn.send({ tipo: 'chat', texto: (texto || '').slice(0, 300), img: img || null, resp: respondendo, tts: ttsLigado && !!(texto || '').trim() });
     cancelarResposta();
     return true;
   }
@@ -2151,10 +2264,11 @@ function entrar(nome, sala) {
     $('aoVivoBox').classList.toggle('oculto', !aoVivo);
     $('btnTransmitir').classList.toggle('oculto', aoVivo);
     const n = assistentes.size;
-    $('pilula').textContent = `AO VIVO · ${n} assistindo`;
+    $('pilula').textContent = `AO VIVO · ${duracao(Date.now() - inicioLive)} · ${n} assistindo`;
     atualizarSom();
     atualizarEspectadores();
   }
+  setInterval(() => { if (aoVivo) atualizarAoVivo(); }, 30000);
   // quem está assistindo a sua tela: fotos em cima da sua tela e nomes ao passar o mouse na pílula
   function atualizarEspectadores() {
     const quem = [...assistentes.keys()].map(id => membros.find(m => m.id === id)).filter(Boolean);
@@ -2233,6 +2347,7 @@ function entrar(nome, sala) {
       s.getAudioTracks().forEach(t => { t.contentHint = 'music'; t.onended = atualizarSom; });
       if (stream) { stream.getVideoTracks().forEach(t => t.onended = null); stream.getTracks().forEach(t => { t.onended = null; t.stop(); }); }
       pararExtras();
+      if (!aoVivo) inicioLive = Date.now();
       stream = s; aoVivo = true;
       semSomOk = fonte === 'console' && selAudio.value === 'nenhum';
       if (!telaLocal) telaLocal = criarTela('eu', nome, true);
