@@ -12,6 +12,15 @@
     --raio:12px;
   }
   * { box-sizing:border-box; }
+  /* barras de rolagem finas e escuras, que só aparecem de verdade ao passar o mouse */
+  * { scrollbar-width:thin; scrollbar-color:transparent transparent; }
+  *:hover { scrollbar-color:#3a3a46 transparent; }
+  ::-webkit-scrollbar { width:8px; height:8px; }
+  ::-webkit-scrollbar-track { background:transparent; }
+  ::-webkit-scrollbar-thumb { background:transparent; border-radius:8px; border:2px solid transparent; background-clip:padding-box; }
+  *:hover::-webkit-scrollbar-thumb { background-color:#3a3a46; }
+  ::-webkit-scrollbar-thumb:hover { background-color:#4d4d5c !important; }
+  ::-webkit-scrollbar-button, ::-webkit-scrollbar-corner { display:none; background:transparent; }
   html,body { margin:0; height:100%; background:var(--bg); color:var(--txt); font-family:system-ui,-apple-system,"Segoe UI",sans-serif; }
   body { display:flex; flex-direction:column; overflow:hidden; }
   button,select,input { font:inherit; color:inherit; }
@@ -564,7 +573,7 @@
 <script>
 const $ = id => document.getElementById(id);
 // Versão desta página. Sobe a cada atualização; quem estiver com uma mais antiga recebe o aviso.
-const VERSAO = 11;
+const VERSAO = 12;
 async function conferirVersao() {
   try {
     const txt = await fetch(location.pathname + '?v=' + Date.now(), { cache: 'no-store' }).then(r => r.text());
