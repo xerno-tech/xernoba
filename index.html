@@ -564,7 +564,7 @@
 <script>
 const $ = id => document.getElementById(id);
 // Versão desta página. Sobe a cada atualização; quem estiver com uma mais antiga recebe o aviso.
-const VERSAO = 10;
+const VERSAO = 11;
 async function conferirVersao() {
   try {
     const txt = await fetch(location.pathname + '?v=' + Date.now(), { cache: 'no-store' }).then(r => r.text());
@@ -785,7 +785,7 @@ function entrar(nome, sala) {
           }
           const admin = !!(ADMIN_HASH && d.adminKey && await sha256(String(d.adminKey)) === ADMIN_HASH);
           const m = { id: c.peer, cid: ccid, nome: String(d.nome).slice(0, 24), live: !!d.live, voz: !!d.voz, mudo: !!d.mudo || silenciados.has(ccid),
-                      ausente: !!d.ausente && !d.live,
+                      ausente: !!d.ausente && !d.live, versao: Number(d.versao) || 0,
                       liveMs: d.live ? Math.max(0, Math.min(Number(d.liveMs) || 0, 7 * 864e5)) : 0,
                       silenciado: silenciados.has(ccid), admin,
                       foto: d.usarFoto && disc && disc.id && disc.avatar ? `https://cdn.discordapp.com/avatars/${disc.id}/${disc.avatar}.png?size=64` : null,
@@ -931,7 +931,7 @@ function entrar(nome, sala) {
   let jaEntrei = false;
   function enviarEstado() {
     if (!hubConn || !hubConn.open) return;
-    hubConn.send({ tipo: 'estado', nome, live: aoVivo, voz: emVoz, mudo: emVoz && mudo, cor: perfil.cor, emoji: perfil.emoji, voltando: jaEntrei, ausente, liveMs: aoVivo && inicioLive ? Date.now() - inicioLive : 0,
+    hubConn.send({ tipo: 'estado', nome, live: aoVivo, voz: emVoz, mudo: emVoz && mudo, cor: perfil.cor, emoji: perfil.emoji, voltando: jaEntrei, ausente, versao: VERSAO, liveMs: aoVivo && inicioLive ? Date.now() - inicioLive : 0,
                    cid, senha: senhaSala, adminKey, token: tokenLogin, usarFoto: perfil.foto });
     jaEntrei = true;
   }
@@ -943,6 +943,7 @@ function entrar(nome, sala) {
     el.innerHTML = '';
     document.querySelectorAll('body > .admMenu').forEach(x => x.remove());
     $('tituloMembros').textContent = `Na sala · ${membros.length}`;
+    const versaoMaisNova = Math.max(0, ...membros.map(m => m.versao || 0));
     const ordenados = [...membros].sort((a, b) => (b.live - a.live) || a.nome.localeCompare(b.nome));
     for (const m of ordenados) {
       const eu = m.id === euId;
@@ -950,7 +951,7 @@ function entrar(nome, sala) {
       div.className = 'membro';
       const status = m.live ? 'Ao vivo' + (m._inicioLocal ? ' · ' + duracao(Date.now() - m._inicioLocal) : '') : m.ausente ? '🌙 Ausente' : m.voz ? (m.mudo ? 'Na voz · mudo' : 'Na voz') : 'Assistindo';
       div.innerHTML = `${avatarHTML(m, (m.live ? 'live' : '') + (m.ausente ? ' ausente' : ''))}
-        <div class="info"><span class="n">${esc(m.nome)}${m.admin ? '<span class="escudo" title="Admin">🛡️</span>' : ''}${eu ? ' <span class="mut">(você)</span>' : ''}</span>
+        <div class="info"><span class="n">${esc(m.nome)}${m.admin ? '<span class="escudo" title="Admin">🛡️</span>' : ''}${(m.versao || 0) < versaoMaisNova ? '<span class="escudo" title="Está com uma versão antiga da Midori. Peça para atualizar (Ctrl+F5).">⚠️</span>' : ''}${eu ? ' <span class="mut">(você)</span>' : ''}</span>
         <span class="s ${m.live ? 'live' : ''}">${status}</span></div>
         ${m.voz ? `<span class="voz" title="${m.mudo ? 'Mudo' : 'Na voz'}">${m.mudo ? '🔇' : '🎙️'}</span>` : ''}`;
       if (m.voz && !eu && emVoz) {
@@ -1956,7 +1957,7 @@ function entrar(nome, sala) {
     const noFim = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
     const div = document.createElement('div');
     const h = document.createElement('span'); h.className = 'hora'; h.textContent = hora(m.ts);
-    div.dataset.uid = m.uid;
+    div.dataset.uid = m.uid; div.dataset.ts = m.ts || 0;
     if (!m.nome) { div.className = 'msg sis'; const t = document.createElement('span'); t.textContent = m.texto; div.append(h, t); }
     else {
       div.className = 'msg' + (meChamaram ? ' mencao' : '');
@@ -1999,7 +2000,10 @@ function entrar(nome, sala) {
         div.appendChild(im);
       }
     }
-    box.appendChild(div);
+    // entra na posição certa pelo horário (o histórico pode chegar fora de ordem quando o organizador muda)
+    let depois = null;
+    for (let x = box.lastElementChild; x; x = x.previousElementSibling) { if (Number(x.dataset.ts || 0) > (m.ts || 0)) depois = x; else break; }
+    box.insertBefore(div, depois);
     if (m.reacoes) atualizarChips(m.uid, m.reacoes);
     while (box.children.length > 200) box.firstChild.remove();
     if (noFim || m.id === euId) box.scrollTop = box.scrollHeight;
