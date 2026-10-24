@@ -92,6 +92,9 @@
   .flutua span { font-size:11px; color:#fff; text-shadow:0 1px 3px #000; margin-top:2px; }
   @keyframes subir { 0% { transform:translateY(0) scale(.6); opacity:0; } 12% { transform:translateY(-20px) scale(1.1); opacity:1; }
                      100% { transform:translateY(-240px) scale(1); opacity:0; } }
+  #faixaVersao { position:fixed; top:0; left:50%; transform:translateX(-50%); z-index:50; margin-top:8px; display:flex; align-items:center; gap:10px;
+                 background:var(--panel3); border:1px solid var(--acc); border-radius:12px; padding:8px 8px 8px 14px; font-size:14px; box-shadow:0 8px 24px rgba(0,0,0,.45); max-width:calc(100% - 24px); }
+  #faixaVersao button { padding:6px 12px; font-size:13px; }
   #telaBloqueio { position:fixed; inset:0; z-index:30; background:rgba(0,0,0,.85); display:flex; align-items:center; justify-content:center; padding:16px; }
   .membro { position:relative; }
   .membro .btnMais { padding:4px 8px; font-size:14px; line-height:1; background:none; border:1px solid transparent; color:var(--mut); }
@@ -229,6 +232,7 @@
 <body>
 <button id="olho" title="Mostrar/ocultar interface"></button>
 <div id="toasts"></div>
+<div id="faixaVersao" class="oculto">🍃 Tem uma versão nova da Midori. <button id="btnAtualizarVersao">Atualizar agora</button><button class="link" id="btnVersaoDepois" title="Depois">✕</button></div>
 
 <!-- ================= ENTRADA ================= -->
 <div id="portao" class="oculto">
@@ -451,6 +455,18 @@
 
 <script>
 const $ = id => document.getElementById(id);
+// Versão desta página. Sobe a cada atualização; quem estiver com uma mais antiga recebe o aviso.
+const VERSAO = 2;
+async function conferirVersao() {
+  try {
+    const txt = await fetch(location.pathname + '?v=' + Date.now(), { cache: 'no-store' }).then(r => r.text());
+    const m = txt.match(/const VERSAO = (\d+);/);
+    if (m && Number(m[1]) > VERSAO) document.getElementById('faixaVersao').classList.remove('oculto');
+  } catch (e) {}
+}
+setInterval(conferirVersao, 5 * 60000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) conferirVersao(); });
+setTimeout(conferirVersao, 15000);
 const salvar = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
 const ler = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
 const limpar = s => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 32);
@@ -1747,6 +1763,9 @@ function entrar(nome, sala) {
   peer.on('disconnected', () => setTimeout(() => { try { peer.reconnect(); } catch (e) {} }, 2000));
   window.addEventListener('beforeunload', () => { if (avisoDoHub) avisoDoHub(`${nome} saiu da sala`, null, null, 'saiu', euId); saindo = true; try { hubConn && hubConn.open && hubConn.send({ tipo: 'tchau' }); } catch (e) {} try { peer.destroy(); } catch (e) {} try { hubPeer && hubPeer.destroy(); } catch (e) {} });
 }
+
+$('btnAtualizarVersao').onclick = () => location.reload();
+$('btnVersaoDepois').onclick = () => $('faixaVersao').classList.add('oculto');
 
 // já veio com ?sala= e tem nome salvo: entra direto
 if (params.get('sala') && ler('nome') && !bloqueadoPeloPortao) $('btnEntrar').click();
