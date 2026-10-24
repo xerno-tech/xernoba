@@ -58,6 +58,8 @@
   body.limpo #faixaSom { display:none; }
   #corpo { flex:1; display:flex; min-height:0; }
   /* layout destaque: uma tela grande e as outras numa faixa embaixo */
+  #grade.flex { display:flex; flex-wrap:wrap; justify-content:center; align-content:center; overflow:hidden; }
+  #grade.flex .tela { flex:0 0 auto; }
   #grade.destaque { grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); grid-template-rows:minmax(0,1fr); grid-auto-rows:140px; }
   #grade.destaque .tela.foco { grid-column:1 / -1; grid-row:1; }
   #grade.destaque .tela:not(.foco) { cursor:pointer; }
@@ -367,8 +369,8 @@
 
     <div class="passo oculto" data-painel="layout">
       <div class="campo">Telas
-        <div class="segmentado" id="ajLayout"><button data-l="grade">▦ Grade</button><button data-l="destaque">▣ Destaque</button></div>
-        <span class="mut" style="font-size:12px">No Destaque, uma tela fica grande e as outras pequenas embaixo. Clique numa pequena para trocar.</span>
+        <div class="segmentado" id="ajLayout"><button data-l="flex">⊞ Flex-Grid</button><button data-l="grade">▦ Grade</button><button data-l="destaque">▣ Destaque</button></div>
+        <span class="mut" style="font-size:12px"><b>Flex-Grid:</b> arruma as telas sozinho, todas no maior tamanho possível. <b>Grade:</b> o jeito antigo. <b>Destaque:</b> uma grande e as outras pequenas embaixo.</span>
       </div>
       <label class="marcar"><input type="checkbox" id="ajChat"> Mostrar o chat</label>
       <label class="marcar"><input type="checkbox" id="ajMuteMini"> Mutar a transmissão quando eu minimizar</label>
@@ -446,7 +448,7 @@ for (const id of ['inNome', 'inSala']) $(id).addEventListener('keydown', e => { 
 
 /* =================== ADMIN (senha) =================== */
 // Código gerado a partir da senha de admin. A senha em si nunca fica no site.
-const ADMIN_HASH = '';
+const ADMIN_HASH = '954289a0bbd96ecbc2216116416613cd1a9f0ed7e205897d0b50cf4305a0e349';
 const hex = buf => [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
 const sha256 = async txt => hex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(txt)));
 async function chaveAdmin(senha) {
@@ -997,6 +999,7 @@ function entrar(nome, sala) {
     const destino = sim ? $('faixaMini') : $('grade');
     t.classList.toggle('mini', sim);
     t.classList.remove('foco');
+    t.style.width = t.style.height = '';   // a faixa usa o tamanho dela; o Flex-Grid recalcula ao voltar
     destino.appendChild(t);
     const v = t.querySelector('video'); v.play().catch(() => {});   // mover pausa o vídeo; volta a tocar
     const b = t.querySelector('[data-a=mini]'); b.textContent = sim ? '🗖' : '🗕'; b.title = sim ? 'Voltar ao tamanho normal' : 'Minimizar';
@@ -1013,6 +1016,7 @@ function entrar(nome, sala) {
     $('vazio').classList.toggle('oculto', document.querySelectorAll('#palco .tela').length > 0);
     $('faixaMini').classList.toggle('oculto', !$('faixaMini').children.length);
     atualizarFoco();
+    if (typeof arrumarFlex === 'function') requestAnimationFrame(arrumarFlex);
   }
   function focar(t) { $('grade').querySelectorAll('.tela').forEach(x => x.classList.toggle('foco', x === t)); }
   function atualizarFoco() {
@@ -1095,8 +1099,28 @@ function entrar(nome, sala) {
   // ---- layout ----
   let layout = ler('layout') || 'grade';
   let mostrarChat = ler('chat') !== '0';
+  // Flex-Grid: testa quantas colunas deixam cada tela (16:9) o maior possível
+  function arrumarFlex() {
+    const g = $('grade'), telas = [...g.querySelectorAll('.tela')];
+    if (layout !== 'flex') { telas.forEach(t => { t.style.width = t.style.height = ''; }); return; }
+    const n = telas.length; if (!n) return;
+    const cs = getComputedStyle(g), gap = parseFloat(cs.columnGap || cs.gap) || 10;
+    const W = g.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - 1;
+    const H = g.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) - 1;
+    let melhor = 0;
+    for (let cols = 1; cols <= n; cols++) {
+      const rows = Math.ceil(n / cols);
+      const w = Math.min((W - gap * (cols - 1)) / cols, ((H - gap * (rows - 1)) / rows) * 16 / 9);
+      if (w > melhor) melhor = w;
+    }
+    melhor = Math.max(120, Math.floor(melhor));
+    telas.forEach(t => { t.style.width = melhor + 'px'; t.style.height = Math.floor(melhor * 9 / 16) + 'px'; });
+  }
+  new ResizeObserver(() => arrumarFlex()).observe($('grade'));
   function aplicarLayout() {
+    $('grade').classList.toggle('flex', layout === 'flex');
     $('grade').classList.toggle('destaque', layout === 'destaque');
+    arrumarFlex();
     document.body.classList.toggle('semChat', !mostrarChat);
     document.querySelectorAll('#ajLayout button').forEach(b => b.classList.toggle('sel', b.dataset.l === layout));
     atualizarFoco();
