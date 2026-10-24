@@ -80,6 +80,18 @@
   body.semChat #chat { display:none; }
   body.semChat #areaLista { max-height:none; flex:1; }
   .avatar.emoji { font-size:17px; }
+  .avatar.foto { background-size:cover !important; background-position:center !important; color:transparent; }
+  .reacoes { position:absolute; top:10px; right:10px; display:flex; gap:4px; opacity:0; transition:opacity .2s; z-index:2; }
+  .tela:hover .reacoes { opacity:1; }
+  .reacoes button { padding:4px 6px; font-size:17px; line-height:1; background:rgba(20,20,26,.8); border:1px solid rgba(255,255,255,.12); border-radius:8px; }
+  .reacoes button:hover { transform:scale(1.15); background:rgba(40,40,50,.9); }
+  #faixaMini .reacoes, body.limpo .reacoes { display:none; }
+  .flutua { position:absolute; bottom:70px; z-index:3; pointer-events:none; display:flex; flex-direction:column; align-items:center;
+            animation:subir 2.4s ease-out forwards; }
+  .flutua b { font-size:36px; line-height:1; filter:drop-shadow(0 2px 4px rgba(0,0,0,.5)); }
+  .flutua span { font-size:11px; color:#fff; text-shadow:0 1px 3px #000; margin-top:2px; }
+  @keyframes subir { 0% { transform:translateY(0) scale(.6); opacity:0; } 12% { transform:translateY(-20px) scale(1.1); opacity:1; }
+                     100% { transform:translateY(-240px) scale(1); opacity:0; } }
   #telaBloqueio { position:fixed; inset:0; z-index:30; background:rgba(0,0,0,.85); display:flex; align-items:center; justify-content:center; padding:16px; }
   .membro { position:relative; }
   .membro .btnMais { padding:4px 8px; font-size:14px; line-height:1; background:none; border:1px solid transparent; color:var(--mut); }
@@ -374,6 +386,7 @@
       </label>
       <div class="campo">Cor do avatar <div class="cores" id="ajCores"></div></div>
       <div class="campo">Emoji no lugar da inicial <div class="emojis" id="ajEmojis"></div></div>
+      <label class="marcar"><input type="checkbox" id="ajFoto"> Usar a minha foto do Discord no avatar</label>
     </div>
 
     <div class="passo oculto" data-painel="sons">
@@ -382,6 +395,7 @@
       <label class="marcar"><input type="checkbox" data-som="live"> Alguém começou a transmitir</label>
       <label class="marcar"><input type="checkbox" data-som="voz"> Alguém entrou ou saiu da voz</label>
       <label class="campo">Volume dos sons <input type="range" id="ajVolSom" min="0" max="1" step="0.05" style="accent-color:var(--acc)"></label>
+      <label class="marcar"><input type="checkbox" id="ajAvisarDiscord"> Avisar no canal do Discord quando eu ficar ao vivo</label>
       <label class="marcar"><input type="checkbox" id="ajNotif"> Avisar no Windows quando a aba estiver em segundo plano (mensagens e transmissões)</label>
       <div class="rodape"><button class="sec" id="ajTestarSom">🔔 Testar som</button></div>
     </div>
@@ -461,7 +475,8 @@ const lerToken = t => { try { return JSON.parse(atob(t.split('.')[0].replace(/-/
   if (location.hash) history.replaceState(null, '', location.pathname + location.search);
 })();
 let tokenLogin = ler('token') || null;
-const dadosLogin = () => { const d = tokenLogin && lerToken(tokenLogin); return d && d.exp > Date.now() ? d : null; };
+// pulseiras antigas (sem o campo da foto) pedem um novo login, uma vez só
+const dadosLogin = () => { const d = tokenLogin && lerToken(tokenLogin); return d && d.exp > Date.now() && 'avatar' in d ? d : null; };
 const ERROS_LOGIN = {
   fora: 'Sua conta do Discord não está no servidor do grupo.',
   cancelado: 'Você cancelou o login no Discord.',
@@ -518,7 +533,8 @@ const hashSenhaSala = (sala, senha) => sha256('midori-sala:' + sala + ':' + senh
 let cid = ler('cid'); if (!cid) { cid = Math.random().toString(36).slice(2) + Date.now().toString(36); salvar('cid', cid); }
 
 /* =================== SALA =================== */
-const perfil = { cor: ler('cor') || null, emoji: ler('emoji') || null };
+const perfil = { cor: ler('cor') || null, emoji: ler('emoji') || null, foto: ler('foto') !== '0' };
+const REACOES = ['😂', '🔥', '😱', '👏', '❤️', '💀'];
 function entrar(nome, sala) {
   $('entrada').classList.add('oculto'); $('sala').classList.remove('oculto');
   document.body.classList.add('naSala');
@@ -548,17 +564,19 @@ function entrar(nome, sala) {
     const autorizados = new Set(regrasSala.autorizados || []);
     // pulseiras de login já conferidas (token -> validade)
     const conferidas = new Map();
+    // devolve os dados do Discord conferidos (id, avatar) ou null
     async function pulseiraValida(token) {
-      if (!LOGIN_URL) return true;
-      if (!token) return false;
+      if (!LOGIN_URL) return {};
+      if (!token) return null;
       const c = conferidas.get(token);
-      if (c && c > Date.now()) return true;
+      if (c && c.ate > Date.now()) return c.dados;
       try {
         const r = await fetch(LOGIN_URL + '/verificar', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token }) }).then(x => x.json());
-        if (r.ok) { conferidas.set(token, Math.min(r.exp, Date.now() + 30 * 60000)); return true; }
+        if (r.ok) { conferidas.set(token, { ate: Math.min(r.exp, Date.now() + 30 * 60000), dados: r }); return r; }
       } catch (e) {}
-      return false;
+      return null;
     }
+    const ultimaReacao = new Map();
     // saída "de verdade" (fechou a aba): anuncia na hora.
     // queda (aba adormecida, internet oscilou): só anuncia se a pessoa não voltar em 3 minutos.
     const pendentes = new Map();   // cid -> timer da saída ainda não anunciada
@@ -598,7 +616,8 @@ function entrar(nome, sala) {
         if (d.tipo === 'estado') {
           const antes = roster.get(c.peer);
           const ccid = String(d.cid || '').slice(0, 40);
-          if (!antes && !(await pulseiraValida(d.token))) {
+          const disc = await pulseiraValida(d.token);
+          if (!antes && !disc) {
             c._fora = true; try { c.send({ tipo: 'semLogin' }); } catch (e) {} setTimeout(() => c.close(), 300); return;
           }
           if (!antes) {
@@ -612,6 +631,7 @@ function entrar(nome, sala) {
           const admin = !!(ADMIN_HASH && d.adminKey && await sha256(String(d.adminKey)) === ADMIN_HASH);
           const m = { id: c.peer, cid: ccid, nome: String(d.nome).slice(0, 24), live: !!d.live, voz: !!d.voz, mudo: !!d.mudo || silenciados.has(ccid),
                       silenciado: silenciados.has(ccid), admin,
+                      foto: d.usarFoto && disc && disc.id && disc.avatar ? `https://cdn.discordapp.com/avatars/${disc.id}/${disc.avatar}.png?size=64` : null,
                       cor: /^#[0-9a-f]{6}$/i.test(d.cor || '') ? d.cor : null, emoji: d.emoji ? String(d.emoji).slice(0, 8) : null };
           roster.set(c.peer, m);
           if (admin && !(antes && antes.admin)) registrar(`${m.nome} agora é admin 🛡️`, null, null, 'nome', c.peer);
@@ -662,6 +682,12 @@ function entrar(nome, sala) {
             try { ca && ca.send({ tipo: 'parar' }); } catch (e) {}
           }
           difundir();
+        } else if (d.tipo === 'reacao') {
+          const m = roster.get(c.peer); if (!m || !REACOES.includes(d.emoji) || !roster.has(d.alvo)) return;
+          if (Date.now() - (ultimaReacao.get(c.peer) || 0) < 250) return;   // sem metralhadora
+          ultimaReacao.set(c.peer, Date.now());
+          const msg = { tipo: 'reacao', alvo: d.alvo, emoji: d.emoji, nome: m.nome };
+          for (const x of conns.values()) if (x.open) try { x.send(msg); } catch (e) {}
         } else if (d.tipo === 'chat') {
           const m = roster.get(c.peer); if (!m) return;
           const texto = String(d.texto || '').trim().slice(0, 300); if (!texto) return;
@@ -685,6 +711,7 @@ function entrar(nome, sala) {
     hubConn.on('data', d => {
       if (!d) return;
       if (d.tipo === 'lista') { membros = d.membros; if (d.regras) regrasSala = d.regras; renderLista(); atualizarAdminUI(); }
+      else if (d.tipo === 'reacao') { mostrarReacao(d); }
       else if (d.tipo === 'expulso') { bloquear('expulso'); }
       else if (d.tipo === 'semLogin') { bloqueado = true; salvar('token', ''); salvar('erroLogin', 'sessao'); location.href = location.pathname; }
       else if (d.tipo === 'pedeSenha') { bloquear('senha', d.errada); }
@@ -703,7 +730,7 @@ function entrar(nome, sala) {
   function enviarEstado() {
     if (!hubConn || !hubConn.open) return;
     hubConn.send({ tipo: 'estado', nome, live: aoVivo, voz: emVoz, mudo: emVoz && mudo, cor: perfil.cor, emoji: perfil.emoji, voltando: jaEntrei,
-                   cid, senha: senhaSala, adminKey, token: tokenLogin });
+                   cid, senha: senhaSala, adminKey, token: tokenLogin, usarFoto: perfil.foto });
     jaEntrei = true;
   }
   setInterval(enviarEstado, 5000);
@@ -1049,6 +1076,16 @@ function entrar(nome, sala) {
         <button data-a="cheia" title="Tela cheia">⛶</button>${local ? '' : '<button data-a="fechar" title="Fechar">✕</button>'}
       </div>`;
     t.querySelector('.n').textContent = titulo;
+    t._alvo = local ? null : id;
+    if (!local) {
+      const bar = document.createElement('div'); bar.className = 'reacoes';
+      for (const e of REACOES) {
+        const b = document.createElement('button'); b.textContent = e; b.title = 'Reagir';
+        b.onclick = ev => { ev.stopPropagation(); if (hubConn && hubConn.open) hubConn.send({ tipo: 'reacao', alvo: id, emoji: e }); };
+        bar.appendChild(b);
+      }
+      t.appendChild(bar);
+    }
     const v = t.querySelector('video');
     const r = t.querySelector('input[type=range]');
     t._chave = titulo;
@@ -1156,6 +1193,20 @@ function entrar(nome, sala) {
     it.tela.remove(); atualizarVazio(); renderLista();
   }
 
+  /* =================== REAÇÕES =================== */
+  function mostrarReacao(d) {
+    const tela = d.alvo === euId ? telaLocal : (assistindo.get(d.alvo) || {}).tela;
+    if (!tela || !REACOES.includes(d.emoji)) return;
+    if (tela.querySelectorAll('.flutua').length > 25) return;
+    const f = document.createElement('div'); f.className = 'flutua';
+    const b = document.createElement('b'); b.textContent = d.emoji;
+    const n = document.createElement('span'); n.textContent = d.nome || '';
+    f.append(b, n);
+    f.style.left = (10 + Math.random() * 75) + '%';
+    tela.appendChild(f);
+    setTimeout(() => f.remove(), 2500);
+  }
+
   /* =================== PERFIL, SONS E LAYOUT =================== */
   const CORES = ['#2fbf71', '#16a3a3', '#3b82f6', '#8b5cf6', '#ec4899', '#ef4444', '#f59e0b', '#64748b'];
   const EMOJIS = ['🍃', '🎮', '🐸', '🐱', '🦊', '🐼', '👾', '🔥', '⚡', '🌙', '🍕', '👑'];
@@ -1166,7 +1217,9 @@ function entrar(nome, sala) {
   function avatarHTML(m, extra = '') {
     const cor = m.cor || corDe(m.nome);
     const dentro = m.emoji ? esc(m.emoji) : esc((m.nome || '?').charAt(0).toUpperCase());
-    return `<div class="avatar ${extra} ${m.emoji ? 'emoji' : ''}" data-av="${esc(m.id || '')}" style="background:${cor}">${dentro}</div>`;
+    const foto = m.foto && /^https:\/\/cdn\.discordapp\.com\/avatars\/\d+\/\w+\.png\?size=64$/.test(m.foto) ? m.foto : null;
+    const estilo = foto ? `background:${cor} url('${foto}')` : `background:${cor}`;
+    return `<div class="avatar ${extra} ${!foto && m.emoji ? 'emoji' : ''} ${foto ? 'foto' : ''}" data-av="${esc(m.id || '')}" style="${estilo}">${dentro}</div>`;
   }
 
   // ---- sons (gerados na hora, sem arquivos) ----
@@ -1266,7 +1319,14 @@ function entrar(nome, sala) {
       $('ajEmojis').appendChild(b);
     }
   }
+  let avisarDiscord = ler('avisarDiscord') !== '0';
+  $('ajFoto').onchange = () => { perfil.foto = $('ajFoto').checked; salvar('foto', perfil.foto ? '1' : '0'); enviarEstado(); };
+  $('ajAvisarDiscord').onchange = () => { avisarDiscord = $('ajAvisarDiscord').checked; salvar('avisarDiscord', avisarDiscord ? '1' : '0'); };
   $('btnAjustes').onclick = () => {
+    $('ajFoto').checked = perfil.foto;
+    $('ajFoto').parentElement.classList.toggle('oculto', !LOGIN_URL);
+    $('ajAvisarDiscord').checked = avisarDiscord;
+    $('ajAvisarDiscord').parentElement.classList.toggle('oculto', !LOGIN_URL);
     $('ajNome').value = nome;
     desenharPerfil();
     document.querySelectorAll('[data-som]').forEach(c => c.checked = !!sons[c.dataset.som]);
@@ -1524,6 +1584,7 @@ function entrar(nome, sala) {
   $('btnFaixaFechar').onclick = () => { semSomOk = true; atualizarSom(); };
 
   async function iniciarTransmissao() {
+    const estavaAoVivo = aoVivo;
     try {
       const { s, faltaSom } = await capturar();
       const vt = s.getVideoTracks()[0];
@@ -1540,6 +1601,9 @@ function entrar(nome, sala) {
       atualizarAoVivo();
       enviarEstado();
       if (!faltaSom) toast('Você está <b>ao vivo</b>. Seus amigos já podem clicar em Assistir.');
+      if (!estavaAoVivo && avisarDiscord && LOGIN_URL && tokenLogin) {
+        fetch(LOGIN_URL + '/avisar', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: tokenLogin, sala, nome }) }).catch(() => {});
+      }
     } catch (e) {
       if (e.name === 'NotAllowedError') return;   // cancelou a escolha
       toast('Não deu para começar: ' + esc(e.message) + (fonte === 'console' ? '<br>Feche OBS, VLC ou outra guia que esteja usando a placa.' : ''), 'erro', 9000);
