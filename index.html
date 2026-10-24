@@ -145,13 +145,9 @@
   #chat { position:relative; }
   #chat.soltando::after { content:"Solte para enviar a imagem"; position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
                           background:rgba(47,191,113,.15); border:2px dashed var(--acc); color:var(--txt); font-size:14px; z-index:5; }
+  .msg a { color:#6ee7a8; text-decoration:underline; word-break:break-all; }
+  .msg a:hover { color:#a7f3c9; }
   .msg img.anexo { display:block; max-width:100%; max-height:200px; border-radius:8px; margin-top:4px; cursor:zoom-in; background:var(--panel2); }
-  #popGif { position:absolute; left:10px; right:10px; bottom:58px; z-index:6; background:var(--panel3); border:1px solid var(--linha); border-radius:12px;
-            padding:8px; display:flex; flex-direction:column; gap:6px; box-shadow:0 10px 26px rgba(0,0,0,.5); }
-  #gridGif { display:grid; grid-template-columns:1fr 1fr; gap:4px; max-height:260px; overflow-y:auto; }
-  #gridGif img { width:100%; height:90px; object-fit:cover; border-radius:6px; cursor:pointer; background:var(--panel2); }
-  #gridGif img:hover { outline:2px solid var(--acc); }
-  #gridGif .mut { grid-column:1/-1; font-size:12px; text-align:center; padding:12px; }
   #lightbox { position:fixed; inset:0; z-index:60; background:rgba(0,0,0,.85); display:flex; align-items:center; justify-content:center; cursor:zoom-out; padding:20px; }
   #lightbox img { max-width:100%; max-height:100%; border-radius:8px; }
   #formChat input { flex:1; padding:8px 10px; }
@@ -319,14 +315,8 @@
       <div id="chat">
         <h2>Chat</h2>
         <div id="msgs"></div>
-        <div id="popGif" class="oculto">
-          <input type="text" id="inGif" placeholder="Buscar GIF…" autocomplete="off">
-          <div id="gridGif"></div>
-          <span class="mut" style="font-size:10px;text-align:right">GIFs do GIPHY</span>
-        </div>
         <form id="formChat" autocomplete="off">
           <button type="button" class="sec icone" id="btnAnexo" title="Enviar imagem ou GIF do PC">📎</button>
-          <button type="button" class="sec icone" id="btnGif" title="Buscar GIF">GIF</button>
           <input type="text" id="inChat" maxlength="300" placeholder="Mensagem, ou cole uma imagem…">
           <button type="submit" title="Enviar">➤</button>
           <input type="file" id="arqImg" accept="image/*" hidden>
@@ -488,7 +478,7 @@
 <script>
 const $ = id => document.getElementById(id);
 // Versão desta página. Sobe a cada atualização; quem estiver com uma mais antiga recebe o aviso.
-const VERSAO = 4;
+const VERSAO = 5;
 async function conferirVersao() {
   try {
     const txt = await fetch(location.pathname + '?v=' + Date.now(), { cache: 'no-store' }).then(r => r.text());
@@ -1600,6 +1590,20 @@ function entrar(nome, sala) {
   /* =================== CHAT =================== */
   const vistas = new Set(); let naoLidas = 0;
   const hora = ts => new Date(ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  // texto com links clicáveis (montado elemento por elemento, nunca como HTML)
+  function preencherComLinks(el, texto) {
+    const re = /\bhttps?:\/\/[^\s<>"']+/gi;
+    let ult = 0, m;
+    while ((m = re.exec(texto))) {
+      let url = m[0].replace(/[.,!?;:)\]]+$/, '');   // tira pontuação grudada no fim
+      if (m.index > ult) el.append(texto.slice(ult, m.index));
+      const a = document.createElement('a');
+      a.href = url; a.textContent = url; a.target = '_blank'; a.rel = 'noopener noreferrer';
+      el.append(a);
+      ult = m.index + url.length; re.lastIndex = ult;
+    }
+    if (ult < texto.length) el.append(texto.slice(ult));
+  }
   function addMsg(m, doHistorico) {
     if (!m || !m.uid || vistas.has(m.uid)) return;   // evita repetir quando o hub muda
     vistas.add(m.uid);
@@ -1612,7 +1616,7 @@ function entrar(nome, sala) {
     else {
       div.className = 'msg';
       const q = document.createElement('span'); q.className = 'quem'; q.style.color = m.cor ? clarear(m.cor) : corDe(m.nome).replace('45%', '68%'); q.textContent = m.nome;
-      const t = document.createElement('span'); t.textContent = m.texto;
+      const t = document.createElement('span'); preencherComLinks(t, m.texto || '');
       div.append(h, q, t);
       // link sozinho de GIF/imagem vira imagem
       const soLink = !m.img && imagemValida((m.texto || '').trim()) && !m.texto.trim().startsWith('data:') ? m.texto.trim() : null;
@@ -1673,33 +1677,6 @@ function entrar(nome, sala) {
   chatBox.addEventListener('dragleave', e => { if (!chatBox.contains(e.relatedTarget)) chatBox.classList.remove('soltando'); });
   chatBox.addEventListener('drop', e => { e.preventDefault(); chatBox.classList.remove('soltando'); const f = [...e.dataTransfer.files].find(x => x.type.startsWith('image/')); if (f) enviarArquivo(f); });
 
-  // busca de GIFs (passa pelo servidor de login, que guarda a chave do GIPHY)
-  let tGif = null;
-  async function buscarGifs(q) {
-    const grid = $('gridGif');
-    if (!LOGIN_URL || !tokenLogin) { grid.innerHTML = '<span class="mut">A busca de GIFs precisa do login pelo Discord.</span>'; return; }
-    grid.innerHTML = '<span class="mut">Buscando…</span>';
-    try {
-      const r = await fetch(`${LOGIN_URL}/gifs?q=${encodeURIComponent(q)}`, { headers: { 'x-pulseira': tokenLogin } }).then(x => x.json());
-      if (!r.ok) { grid.innerHTML = '<span class="mut">' + (r.erro === 'sem-chave' ? 'A busca de GIFs ainda não foi configurada.' : 'Não deu para buscar agora.') + '</span>'; return; }
-      grid.innerHTML = r.gifs.length ? '' : '<span class="mut">Nada encontrado.</span>';
-      for (const g of r.gifs) {
-        if (!imagemValida(g.url)) continue;
-        const im = document.createElement('img'); im.src = g.preview || g.url; im.alt = g.titulo || 'GIF'; im.title = g.titulo || ''; im.loading = 'lazy'; im.referrerPolicy = 'no-referrer';
-        im.onclick = () => { if (enviarChat('', g.url)) $('popGif').classList.add('oculto'); };
-        grid.appendChild(im);
-      }
-    } catch (e) { grid.innerHTML = '<span class="mut">Não deu para buscar agora.</span>'; }
-  }
-  $('btnGif').onclick = e => {
-    e.stopPropagation();
-    const pop = $('popGif'), abrir = pop.classList.contains('oculto');
-    pop.classList.toggle('oculto', !abrir);
-    if (abrir) { $('inGif').value = ''; buscarGifs(''); setTimeout(() => $('inGif').focus(), 30); }
-  };
-  $('inGif').oninput = () => { clearTimeout(tGif); tGif = setTimeout(() => buscarGifs($('inGif').value.trim()), 350); };
-  $('popGif').onclick = e => e.stopPropagation();
-  document.addEventListener('click', () => $('popGif').classList.add('oculto'));
 
   $('formChat').onsubmit = e => {
     e.preventDefault();
