@@ -215,7 +215,7 @@
       <div class="opcoes">
         <button class="opcao" data-fonte="console"><span class="ic">🎮</span><div><b>Console</b><span>Pela placa de captura (ou uma câmera)</span></div><span class="seta">›</span></button>
         <button class="opcao" data-fonte="janela"><span class="ic">🕹️</span><div><b>Jogo do PC</b><span>Uma janela ou guia, com o som só dela</span></div><span class="seta">›</span></button>
-        <button class="opcao" data-fonte="tela"><span class="ic">🖥️</span><div><b>Tela inteira</b><span>A tela toda, com o som só do jogo</span></div><span class="seta">›</span></button>
+        <button class="opcao" data-fonte="tela"><span class="ic">🖥️</span><div><b>Tela inteira</b><span>A tela toda, com o som do PC (sem as conversas)</span></div><span class="seta">›</span></button>
       </div>
       <div class="nota">Em todos os modos, o som do <b>Discord</b> e das conversas <b>não vai</b> para a transmissão.</div>
     </div>
@@ -236,8 +236,8 @@
       </ol>
 
       <ol class="passos oculto" id="cfgTela">
-        <li>Clique em <b>Começar</b> e escolha a <b>tela</b>.</li>
-        <li>Depois, clique em <b>Adicionar som</b> e escolha a janela do jogo: dela vem só o som.</li>
+        <li>Clique em <b>Começar</b> e escolha o <b>Ecrã inteiro</b>.</li>
+        <li>Deixe ligado <b>"Partilhar também o áudio do sistema"</b> e confirme. Vai o som do PC, sem as conversas.</li>
       </ol>
 
       <div class="nota oculto" id="notaJogo">Se o jogo aparecer <b>preto</b>, coloque-o em <b>janela sem bordas</b> nas configurações de vídeo dele.</div>
@@ -593,12 +593,25 @@ function entrar(nome, sala) {
       if (s.getVideoTracks()[0].getSettings().displaySurface === 'monitor') s.getAudioTracks().forEach(t => { t.stop(); s.removeTrack(t); });
       return { s, faltaSom: !s.getAudioTracks().length };
     }
-    // tela inteira: só a imagem aqui; o som vem de uma janela depois
+    // tela inteira: som do sistema, mas com o Chrome isolando o próprio áudio (as conversas ficam de fora)
     const s = await navigator.mediaDevices.getDisplayMedia({
-      video: { ...VIDEO, displaySurface: 'monitor' }, audio: false,
-      systemAudio: 'exclude', monitorTypeSurfaces: 'include', selfBrowserSurface: 'exclude', surfaceSwitching: 'include'
+      video: { ...VIDEO, displaySurface: 'monitor' },
+      audio: { ...SEM_PROC, suppressLocalAudioPlayback: false, restrictOwnAudio: true },
+      systemAudio: 'include', windowAudio: 'window', monitorTypeSurfaces: 'include',
+      selfBrowserSurface: 'exclude', surfaceSwitching: 'include'
     });
-    return { s, faltaSom: true };
+    // só fica com o som se o Chrome confirmar que o isolamento está ligado
+    let isolado = s.getAudioTracks().length > 0;
+    for (const t of s.getAudioTracks()) {
+      const ok = () => { try { return t.getSettings().restrictOwnAudio === true; } catch (e) { return false; } };
+      if (!ok()) try { await t.applyConstraints({ restrictOwnAudio: { exact: true } }); } catch (e) {}
+      if (!ok()) isolado = false;
+    }
+    if (s.getAudioTracks().length && !isolado) {
+      s.getAudioTracks().forEach(t => { t.stop(); s.removeTrack(t); });
+      toast('Seu Chrome não conseguiu isolar o som do sistema, então ele ficou de fora. Atualize o Chrome ou use <b>Adicionar som</b>.', 'aviso', 9000);
+    }
+    return { s, faltaSom: !s.getAudioTracks().length };
   }
 
   async function aplicarBitrate(call) {
@@ -634,7 +647,7 @@ function entrar(nome, sala) {
   function atualizarSom() {
     const ok = temSom();
     const b = $('btnSom');
-    b.textContent = ok ? '🔊 Som do jogo' : '🔇 Adicionar som';
+    b.textContent = ok ? (fonte === 'tela' ? '🔊 Som do PC' : '🔊 Som do jogo') : '🔇 Adicionar som';
     b.classList.toggle('semSom', !ok);
     $('faixaSom').classList.toggle('oculto', !aoVivo || ok || semSomOk);
   }
