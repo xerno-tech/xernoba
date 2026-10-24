@@ -237,6 +237,7 @@
   .avatar.falando { box-shadow:0 0 0 2px var(--panel), 0 0 0 4px var(--ok); }
   .membro .voz { font-size:12px; }
   .membro .volVoz { width:64px; accent-color:var(--ok); display:none; }
+  .membro .volVoz.alto { accent-color:var(--aviso); }
   .membro:hover .volVoz { display:block; }
   #vozBox { display:flex; align-items:center; gap:6px; position:relative; }
   #popMic { position:absolute; top:calc(100% + 8px); right:0; z-index:15; width:300px; background:var(--panel); border:1px solid var(--linha);
@@ -578,7 +579,7 @@
 <script>
 const $ = id => document.getElementById(id);
 // Versão desta página. Sobe a cada atualização; quem estiver com uma mais antiga recebe o aviso.
-const VERSAO = 13;
+const VERSAO = 14;
 async function conferirVersao() {
   try {
     const txt = await fetch(location.pathname + '?v=' + Date.now(), { cache: 'no-store' }).then(r => r.text());
@@ -985,9 +986,15 @@ function entrar(nome, sala) {
         ${m.voz ? `<span class="voz" title="${m.mudo ? 'Mudo' : 'Na voz'}">${m.mudo ? '🔇' : '🎙️'}</span>` : ''}`;
       if (m.voz && !eu && emVoz) {
         const r = document.createElement('input');
-        r.type = 'range'; r.min = 0; r.max = 1; r.step = 0.01; r.className = 'volVoz'; r.title = 'Volume da voz';
+        r.type = 'range'; r.min = 0; r.max = 2; r.step = 0.05; r.className = 'volVoz';
         r.value = ler('volVoz-' + m.nome) || '1';
-        r.oninput = () => { salvar('volVoz-' + m.nome, r.value); const v = vozes.get(m.id); if (v && v.audio) v.audio.volume = Number(r.value); };
+        const dica = () => { r.title = `Volume da voz: ${Math.round(r.value * 100)}%`; r.classList.toggle('alto', r.value > 1); };
+        dica();
+        r.oninput = () => {
+          salvar('volVoz-' + m.nome, r.value); dica();
+          const v = vozes.get(m.id);
+          if (v && v.ganho) v.ganho.gain.value = Number(r.value); else if (v && v.audio) v.audio.volume = Math.min(1, Number(r.value));
+        };
         div.appendChild(r);
       }
       if (m.live && !eu) {
@@ -1163,10 +1170,17 @@ function entrar(nome, sala) {
     vozes.set(id, item);
     call.on('stream', s => {
       if (item.audio) return;
-      const a = new Audio(); a.autoplay = true; a.srcObject = s;
-      const m = membros.find(x => x.id === id);
-      a.volume = Number(ler('volVoz-' + (m ? m.nome : '')) || 1);
+      // a voz passa por um ganho para poder ir até 200%; o elemento de áudio fica mudo
+      // (o Chrome precisa dele ligado para o som da chamada fluir)
+      const a = new Audio(); a.autoplay = true; a.srcObject = s; a.muted = true;
       a.play().catch(() => {});
+      const m = membros.find(x => x.id === id);
+      const vol = Number(ler('volVoz-' + (m ? m.nome : '')) || 1);
+      try {
+        const g = ctxVoz.createGain(); g.gain.value = vol;
+        item.fonteVoz = ctxVoz.createMediaStreamSource(s); item.fonteVoz.connect(g); g.connect(ctxVoz.destination);
+        item.ganho = g;
+      } catch (e) { a.muted = false; a.volume = Math.min(1, vol); }
       item.audio = a; item.para = medirFala(s, id);
     });
     const fim = () => { if (vozes.get(id) === item) fecharVoz(id); };
@@ -1177,6 +1191,7 @@ function entrar(nome, sala) {
     vozes.delete(id);
     try { v.call.close(); } catch (e) {}
     if (v.audio) { v.audio.srcObject = null; }
+    try { v.fonteVoz && v.fonteVoz.disconnect(); v.ganho && v.ganho.disconnect(); } catch (e) {}
     if (v.para) v.para();
     document.querySelectorAll(`[data-av="${CSS.escape(id)}"]`).forEach(a => a.classList.remove('falando'));
     falandoDesde.delete(id); atualizarFalantes();
