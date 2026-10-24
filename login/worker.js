@@ -9,10 +9,8 @@
 //   DISCORD_CLIENT_ID     (texto)   Client ID do app no Discord
 //   DISCORD_GUILD_ID      (texto)   ID do servidor do Discord (vários: separe por vírgula)
 //   DISCORD_CLIENT_SECRET (secret)  Client Secret do app no Discord — nunca vai para o GitHub
-//   DISCORD_WEBHOOK       (secret)  endereço do webhook do canal de avisos (opcional)
 
 const DIAS = 7;
-const ultimoAviso = new Map();   // quem já avisou há pouco (evita spam no canal)
 
 export default {
   async fetch(req, env) {
@@ -79,29 +77,6 @@ export default {
       try { token = String((await req.json()).token || ''); } catch (e) {}
       const dados = await conferir(token, env.DISCORD_CLIENT_SECRET);
       return Response.json(dados ? { ok: true, id: dados.id, nome: dados.nome, avatar: dados.avatar || null, exp: dados.exp } : { ok: false }, { headers: cors });
-    }
-
-    // 4) avisa no canal do Discord que alguém ficou ao vivo
-    if (url.pathname === '/avisar' && req.method === 'POST') {
-      let corpo = {};
-      try { corpo = await req.json(); } catch (e) {}
-      const dados = await conferir(String(corpo.token || ''), env.DISCORD_CLIENT_SECRET);
-      if (!dados || !env.DISCORD_WEBHOOK) return Response.json({ ok: false }, { headers: cors });
-      const sala = String(corpo.sala || '').toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 32);
-      const nome = String(corpo.nome || dados.nome).replace(/[`*_~|<>@#]/g, '').slice(0, 24) || dados.nome;
-      if (!sala) return Response.json({ ok: false }, { headers: cors });
-      const chaveAviso = dados.id + ':' + sala;
-      if (Date.now() - (ultimoAviso.get(chaveAviso) || 0) < 5 * 60000) return Response.json({ ok: true, repetido: true }, { headers: cors });
-      ultimoAviso.set(chaveAviso, Date.now());
-      await fetch(env.DISCORD_WEBHOOK, {
-        method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          username: 'Midori Xernoba',
-          content: `🔴 **${nome}** está ao vivo na sala **${sala}**!\n${site}?sala=${sala}`,
-          allowed_mentions: { parse: [] },
-        }),
-      });
-      return Response.json({ ok: true }, { headers: cors });
     }
 
     return new Response('Midori Xernoba — login com Discord. Está funcionando.', { headers: { 'content-type': 'text/plain; charset=utf-8' } });

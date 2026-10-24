@@ -344,12 +344,25 @@
 
       <div class="nota oculto" id="notaJogo">Se o jogo aparecer <b>preto</b>, coloque-o em <b>janela sem bordas</b> nas configurações de vídeo dele.</div>
 
-      <div class="campo">Qualidade
+      <div class="campo">Resolução
+        <div class="segmentado" id="segRes">
+          <button data-r="720">720p</button><button data-r="1080">1080p</button><button data-r="1440">1440p</button><button data-r="2160">4K</button>
+        </div>
+      </div>
+      <div class="campo">Quadros por segundo
+        <div class="segmentado" id="segFps"><button data-f="30">30 fps</button><button data-f="60">60 fps</button></div>
+      </div>
+      <div class="campo">Qualidade (quanto da sua internet usar)
         <div class="segmentado" id="segQual">
-          <button data-q="3000">Leve</button><button data-q="6000">Boa</button><button data-q="10000">Alta</button>
+          <button data-q="3000">Leve</button><button data-q="6000">Boa</button><button data-q="10000">Alta</button><button data-q="20000">Máxima</button>
         </div>
         <span class="mut" id="dicaQual" style="font-size:12px"></span>
       </div>
+      <div class="campo">Se a internet apertar, priorizar
+        <div class="segmentado" id="segPrio"><button data-p="fluidez">Fluidez</button><button data-p="nitidez">Nitidez</button></div>
+        <span class="mut" id="dicaPrio" style="font-size:12px"></span>
+      </div>
+      <span class="mut" style="font-size:12px">Dá para mudar tudo isso no meio da transmissão, pelo botão <b>Trocar</b>. A resolução nunca passa da que a sua placa ou tela entrega.</span>
 
       <div class="rodape">
         <button class="sec" data-fechar>Cancelar</button>
@@ -395,7 +408,6 @@
       <label class="marcar"><input type="checkbox" data-som="live"> Alguém começou a transmitir</label>
       <label class="marcar"><input type="checkbox" data-som="voz"> Alguém entrou ou saiu da voz</label>
       <label class="campo">Volume dos sons <input type="range" id="ajVolSom" min="0" max="1" step="0.05" style="accent-color:var(--acc)"></label>
-      <label class="marcar"><input type="checkbox" id="ajAvisarDiscord"> Avisar no canal do Discord quando eu ficar ao vivo</label>
       <label class="marcar"><input type="checkbox" id="ajNotif"> Avisar no Windows quando a aba estiver em segundo plano (mensagens e transmissões)</label>
       <div class="rodape"><button class="sec" id="ajTestarSom">🔔 Testar som</button></div>
     </div>
@@ -426,6 +438,9 @@
         <div class="campo">Senha da sala <span class="mut" id="admStatusSenha" style="font-size:12px"></span>
           <div style="display:flex;gap:8px"><input type="text" id="admSenhaSala" maxlength="40" placeholder="Nova senha"><button id="admDefinirSenha">Definir</button></div>
           <span class="mut" style="font-size:12px">Quem já está na sala continua. Quem entrar depois precisa digitar a senha. Quando todo mundo sai, a sala e a senha somem.</span>
+        </div>
+        <div class="campo">Expulsos desta sala
+          <div id="admBanidos" style="display:flex;flex-direction:column;gap:6px"></div>
         </div>
         <div class="rodape"><button class="sec" id="admRemoverSenha">Remover senha da sala</button><button class="sec" id="admSair">Sair do modo admin</button></div>
       </div>
@@ -558,6 +573,7 @@ function entrar(nome, sala) {
     const historico = [];
     // regras da sala: herdadas do último hub, para não sumirem quando o hub muda
     const banidos = new Set(regrasSala.banidos || []);
+    const nomesBanidos = Object.assign({}, regrasSala.nomesBanidos || {});   // cid -> nome, para a lista do admin
     const silenciados = new Set(regrasSala.silenciados || []);
     let senhaHash = regrasSala.senhaHash || null;
     // quem já pode estar na sala com senha (estava dentro quando a senha foi posta, ou acertou a senha)
@@ -601,7 +617,7 @@ function entrar(nome, sala) {
     };
     const difundir = () => {
       const lista = [...roster.values()].map(({ cid: _c, _expulso, ...m }) => m);
-      const regras = { banidos: [...banidos], silenciados: [...silenciados], senhaHash, autorizados: [...autorizados] };
+      const regras = { banidos: [...banidos], nomesBanidos, silenciados: [...silenciados], senhaHash, autorizados: [...autorizados] };
       for (const c of conns.values()) if (c.open) try { c.send({ tipo: 'lista', membros: lista, regras }); } catch (e) {}
     };
     hubPeer.on('open', () => { avisoDoHub = registrar; conectarHub(); });
@@ -663,10 +679,18 @@ function entrar(nome, sala) {
             registrar(senhaHash ? `${adm.nome} colocou senha na sala 🔒` : `${adm.nome} tirou a senha da sala 🔓`, null, null, 'nome', c.peer);
             difundir(); return;
           }
+          if (d.acao === 'desbanir') {
+            const ccid = String(d.cid || '');
+            if (!banidos.has(ccid)) return;
+            banidos.delete(ccid);
+            registrar(`${adm.nome} deixou ${nomesBanidos[ccid] || 'alguém'} voltar para a sala`, null, null, 'nome', c.peer);
+            delete nomesBanidos[ccid];
+            difundir(); return;
+          }
           const alvo = roster.get(d.alvo); if (!alvo || alvo.id === adm.id) return;
           const ca = conns.get(alvo.id);
           if (d.acao === 'expulsar') {
-            if (alvo.cid) { banidos.add(alvo.cid); autorizados.delete(alvo.cid); }
+            if (alvo.cid) { banidos.add(alvo.cid); nomesBanidos[alvo.cid] = alvo.nome; autorizados.delete(alvo.cid); }
             alvo._expulso = true;
             registrar(`${adm.nome} removeu ${alvo.nome} da sala`, null, null, 'saiu', alvo.id);
             try { ca && ca.send({ tipo: 'expulso' }); } catch (e) {}
@@ -847,6 +871,16 @@ function entrar(nome, sala) {
     $('admLogin').classList.toggle('oculto', !ADMIN_HASH || adm);
     $('admPainel').classList.toggle('oculto', !adm);
     $('admStatusSenha').textContent = regrasSala.senhaHash ? '· 🔒 com senha agora' : '· 🔓 sem senha agora';
+    const box = $('admBanidos'); box.innerHTML = '';
+    const lista = regrasSala.banidos || [];
+    if (!lista.length) { const v = document.createElement('span'); v.className = 'mut'; v.style.fontSize = '12px'; v.textContent = 'Ninguém foi expulso.'; box.appendChild(v); }
+    for (const ccid of lista) {
+      const linha = document.createElement('div'); linha.style.cssText = 'display:flex;align-items:center;gap:8px';
+      const n = document.createElement('span'); n.style.flex = '1'; n.textContent = (regrasSala.nomesBanidos || {})[ccid] || 'Alguém';
+      const b = document.createElement('button'); b.className = 'sec'; b.textContent = 'Deixar voltar';
+      b.onclick = () => acaoAdmin('desbanir', null, { cid: ccid });
+      linha.append(n, b); box.appendChild(linha);
+    }
   }
   $('admGerar').onclick = async () => {
     const a = $('admNovaSenha').value, b = $('admNovaSenha2').value;
@@ -1319,14 +1353,10 @@ function entrar(nome, sala) {
       $('ajEmojis').appendChild(b);
     }
   }
-  let avisarDiscord = ler('avisarDiscord') !== '0';
   $('ajFoto').onchange = () => { perfil.foto = $('ajFoto').checked; salvar('foto', perfil.foto ? '1' : '0'); enviarEstado(); };
-  $('ajAvisarDiscord').onchange = () => { avisarDiscord = $('ajAvisarDiscord').checked; salvar('avisarDiscord', avisarDiscord ? '1' : '0'); };
   $('btnAjustes').onclick = () => {
     $('ajFoto').checked = perfil.foto;
     $('ajFoto').parentElement.classList.toggle('oculto', !LOGIN_URL);
-    $('ajAvisarDiscord').checked = avisarDiscord;
-    $('ajAvisarDiscord').parentElement.classList.toggle('oculto', !LOGIN_URL);
     $('ajNome').value = nome;
     desenharPerfil();
     document.querySelectorAll('[data-som]').forEach(c => c.checked = !!sons[c.dataset.som]);
@@ -1436,7 +1466,34 @@ function entrar(nome, sala) {
   // --- janela de transmitir ---
   const modal = $('modal');
   const TITULOS = { console: '🎮 Console', janela: '🕹️ Jogo do PC', tela: '🖥️ Tela inteira' };
-  const DICAS_QUAL = { 3000: 'Para internet mais fraca ou 3+ pessoas assistindo.', 6000: 'Recomendado para a maioria.', 10000: 'Imagem mais nítida. Precisa de internet muito boa.' };
+  const DICAS_QUAL = { 3000: '3 Mbps por pessoa assistindo. Para internet fraca ou muita gente vendo.', 6000: '6 Mbps por pessoa. Recomendado para a maioria.',
+                       10000: '10 Mbps por pessoa. Precisa de internet boa.', 20000: '20 Mbps por pessoa. Só com internet muito boa e poucos assistindo.' };
+  const DICAS_PRIO = { fluidez: 'Mantém os quadros por segundo e baixa a nitidez. Melhor para jogos rápidos.',
+                       nitidez: 'Mantém a imagem nítida e baixa os quadros. Melhor para texto, menus e jogos parados.' };
+  const RES = { 720: [1280, 720], 1080: [1920, 1080], 1440: [2560, 1440], 2160: [3840, 2160] };
+  let resol = ler('resol') || '1080', fps = ler('fps') || '60', prio = ler('prio') || 'fluidez';
+  const restricoesVideo = () => { const [w, h] = RES[resol]; return { width: { ideal: w, max: w }, height: { ideal: h, max: h }, frameRate: { ideal: Number(fps), max: Number(fps) } }; };
+  async function aplicarVideoAoVivo() {
+    const vt = stream && stream.getVideoTracks()[0]; if (!vt) return;
+    try { await vt.applyConstraints(restricoesVideo()); } catch (e) {}
+    for (const a of assistentes.values()) aplicarBitrate(a.call);
+    mostrarSaida();
+  }
+  function mostrarSaida() {
+    const vt = stream && stream.getVideoTracks()[0]; if (!vt) return;
+    const st = vt.getSettings();
+    if (st.width) toast(`Enviando ${st.width}×${st.height} a ${Math.round(st.frameRate || 0)} fps.`, '', 4000);
+  }
+  function seg(id, attr, atual, onSel) {
+    document.querySelectorAll(`#${id} button`).forEach(b => {
+      b.classList.toggle('sel', b.dataset[attr] === atual);
+      b.onclick = () => { onSel(b.dataset[attr]); document.querySelectorAll(`#${id} button`).forEach(x => x.classList.toggle('sel', x === b)); };
+    });
+  }
+  seg('segRes', 'r', resol, v => { resol = v; salvar('resol', v); if (aoVivo) aplicarVideoAoVivo(); });
+  seg('segFps', 'f', fps, v => { fps = v; salvar('fps', v); if (aoVivo) aplicarVideoAoVivo(); });
+  seg('segPrio', 'p', prio, v => { prio = v; salvar('prio', v); $('dicaPrio').textContent = DICAS_PRIO[prio]; if (aoVivo) for (const a of assistentes.values()) aplicarBitrate(a.call); });
+  $('dicaPrio').textContent = DICAS_PRIO[prio];
   function mostrarPasso(id) { for (const p of ['pFonte', 'pConfig']) $(p).classList.toggle('oculto', p !== id); modal.classList.remove('oculto'); }
   function fecharModal() { modal.classList.add('oculto'); }
   function abrirModal() { mostrarPasso('pFonte'); }
@@ -1477,13 +1534,13 @@ function entrar(nome, sala) {
     if (fonte === 'console') {
       const comSom = selAudio.value && selAudio.value !== 'nenhum';
       const s = await navigator.mediaDevices.getUserMedia({
-        video: { deviceId: selVideo.value ? { exact: selVideo.value } : undefined, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 60 } },
+        video: { deviceId: selVideo.value ? { exact: selVideo.value } : undefined, ...restricoesVideo() },
         audio: comSom ? { deviceId: { exact: selAudio.value }, ...SEM_PROC, channelCount: { ideal: 2 }, sampleRate: { ideal: 48000 } } : false
       });
       salvar('video', selVideo.value); salvar('audio', selAudio.value);
       return { s, faltaSom: false };
     }
-    const VIDEO = { frameRate: { ideal: 60 }, width: { ideal: 1920 }, height: { ideal: 1080 } };
+    const VIDEO = restricoesVideo();
     if (fonte === 'janela') {
       const s = await navigator.mediaDevices.getDisplayMedia({
         video: VIDEO, audio: { ...SEM_PROC, restrictOwnAudio: true },
@@ -1522,7 +1579,7 @@ function entrar(nome, sala) {
       const p = snd.getParameters();
       if (!p.encodings || !p.encodings.length) p.encodings = [{}];
       p.encodings[0].maxBitrate = Number(qual) * 1000;
-      p.degradationPreference = 'maintain-framerate';
+      p.degradationPreference = prio === 'nitidez' ? 'maintain-resolution' : 'maintain-framerate';
       try { await snd.setParameters(p); } catch (e) {}
     }
   }
@@ -1584,7 +1641,6 @@ function entrar(nome, sala) {
   $('btnFaixaFechar').onclick = () => { semSomOk = true; atualizarSom(); };
 
   async function iniciarTransmissao() {
-    const estavaAoVivo = aoVivo;
     try {
       const { s, faltaSom } = await capturar();
       const vt = s.getVideoTracks()[0];
@@ -1601,9 +1657,7 @@ function entrar(nome, sala) {
       atualizarAoVivo();
       enviarEstado();
       if (!faltaSom) toast('Você está <b>ao vivo</b>. Seus amigos já podem clicar em Assistir.');
-      if (!estavaAoVivo && avisarDiscord && LOGIN_URL && tokenLogin) {
-        fetch(LOGIN_URL + '/avisar', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: tokenLogin, sala, nome }) }).catch(() => {});
-      }
+      setTimeout(mostrarSaida, 1200);
     } catch (e) {
       if (e.name === 'NotAllowedError') return;   // cancelou a escolha
       toast('Não deu para começar: ' + esc(e.message) + (fonte === 'console' ? '<br>Feche OBS, VLC ou outra guia que esteja usando a placa.' : ''), 'erro', 9000);
