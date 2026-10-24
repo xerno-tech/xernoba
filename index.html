@@ -452,7 +452,7 @@ atualizarOlho();
 
 /* ---------- Login com Discord + 18+ ---------- */
 // Endereço do servidor de login (Cloudflare Worker). Vazio = sem login (como antes).
-const LOGIN_URL = '';
+const LOGIN_URL = 'https://midori-login.douglasfonsec2021.workers.dev';
 const lerToken = t => { try { return JSON.parse(atob(t.split('.')[0].replace(/-/g, '+').replace(/_/g, '/'))); } catch (e) { return null; } };
 (function lerRetornoLogin() {
   const h = new URLSearchParams(location.hash.slice(1));
