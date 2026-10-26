@@ -153,12 +153,19 @@ function alternarPainel(t, id, local) {
     const pcs = local ? [...assistentes.values()].map(a => a.call && a.call.peerConnection).filter(Boolean)
                       : [((assistindo.get(id) || {}).call || {}).peerConnection].filter(Boolean);
     let w = 0, h = 0, fps = 0, bytes = 0, perd = 0, pacotes = 0, rtts = [], via = new Set();
+    let captura = 0, limite = new Set(), placa = null, formato = '';
     for (const pc of pcs) {
       let st; try { st = await pc.getStats(); } catch (e) { continue; }
       const cand = {};
       st.forEach(r => { if (r.type === 'local-candidate' || r.type === 'remote-candidate') cand[r.id] = r; });
       st.forEach(r => {
+        if (local && r.type === 'media-source' && r.kind === 'video') captura = Math.max(captura, r.framesPerSecond || 0);
         if (r.kind === 'video' && r.type === (local ? 'outbound-rtp' : 'inbound-rtp')) {
+          if (r.qualityLimitationReason) limite.add(r.qualityLimitationReason);
+          const ef = local ? r.powerEfficientEncoder : r.powerEfficientDecoder;
+          if (ef != null) placa = placa || ef;
+          const cod = r.codecId && st.get(r.codecId);
+          if (cod && cod.mimeType) formato = cod.mimeType.replace(/^video\//, '');
           w = Math.max(w, r.frameWidth || 0); h = Math.max(h, r.frameHeight || 0); fps = Math.max(fps, r.framesPerSecond || 0);
           bytes += local ? (r.bytesSent || 0) : (r.bytesReceived || 0);
           if (!local) { perd += r.packetsLost || 0; pacotes += (r.packetsReceived || 0) + (r.packetsLost || 0); }
@@ -180,7 +187,10 @@ function alternarPainel(t, id, local) {
     el.innerHTML = `<div class="tit"><span class="bola ${estado}"></span>${local ? (pcs.length ? `Enviando para ${pcs.length}` : 'Ninguém assistindo ainda') : 'Recebendo'}</div>`
       + (pcs.length ? lin('Imagem', w ? `${w}×${h}` : '—') + lin('Quadros', fps ? `${Math.round(fps)} fps` : '—')
         + lin(local ? 'Enviando' : 'Chegando', `${mbps.toFixed(1)} Mbps`) + lin('Atraso', rtt != null ? `${rtt} ms` : '—')
-        + (local ? '' : lin('Perda', `${perdaPct.toFixed(1)}%`)) + lin('Conexão', [...via].join(' / ') || '—') : '');
+        + (local ? '' : lin('Perda', `${perdaPct.toFixed(1)}%`)) + lin('Conexão', [...via].join(' / ') || '—')
+        + (local && captura ? lin('Captura', `${Math.round(captura)} fps`) : '')
+        + (local ? lin('Limitado por', limite.has('cpu') ? '<b class="alerta">processador</b>' : limite.has('bandwidth') ? '<b class="alerta">internet</b>' : 'nada') : '')
+        + (formato ? lin(local ? 'Compressão' : 'Formato', formato + (placa == null ? '' : placa ? ' · placa de vídeo' : ' · processador')) : '') : '');
   };
   ler1();
   t._painel = { el, tm: setInterval(ler1, 1000) };

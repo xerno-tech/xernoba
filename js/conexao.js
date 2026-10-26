@@ -36,7 +36,7 @@ function iniciarConexao() {
     }
     const it = assistindo.get(call.peer);
     if (!it) { try { call.close(); } catch (e) {} return; }
-    call.answer(undefined, { sdpTransform: sdpEstereo });
+    call.answer(undefined, { sdpTransform: sdpTransmissao });
     if (it.call && it.call !== call) try { it.call.close(); } catch (e) {}
     it.call = call;
     const v = it.tela.querySelector('video');

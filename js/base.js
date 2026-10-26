@@ -14,6 +14,26 @@ const salvar = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
 const ler = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
 const limpar = s => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 32);
 const sdpEstereo = sdp => sdp.replace(/useinbandfec=1/g, 'useinbandfec=1;stereo=1;sprop-stereo=1;maxaveragebitrate=192000');
+// Coloca o H.264 na frente da lista de formatos de vídeo: quase toda placa de vídeo comprime H.264 sozinha,
+// o que tira o peso do processador de quem transmite. Se um dos lados não tiver H.264, os outros formatos continuam na lista.
+function sdpH264(sdp) {
+  const linhas = sdp.split('\r\n');
+  const iM = linhas.findIndex(l => l.startsWith('m=video '));
+  if (iM < 0) return sdp;
+  let fim = linhas.findIndex((l, i) => i > iM && l.startsWith('m='));
+  if (fim < 0) fim = linhas.length;
+  const secao = linhas.slice(iM, fim).join('\n');
+  const h264 = [...secao.matchAll(/^a=rtpmap:(\d+) H264\/90000/gm)].map(m => m[1]);
+  if (!h264.length) return sdp;
+  const nota = pt => { const f = (secao.match(new RegExp(`^a=fmtp:${pt} (.*)$`, 'm')) || [])[1] || '';
+    return (/packetization-mode=1/.test(f) ? 0 : 2) + (/profile-level-id=42e0/.test(f) ? 0 : 1); };   // o mais compatível primeiro
+  h264.sort((a, b) => nota(a) - nota(b));
+  const partes = linhas[iM].split(' ');
+  const pts = partes.slice(3);
+  linhas[iM] = [...partes.slice(0, 3), ...h264, ...pts.filter(p => !h264.includes(p))].join(' ');
+  return linhas.join('\r\n');
+}
+const sdpTransmissao = sdp => sdpH264(sdpEstereo(sdp));
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 const corDe = s => { let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) % 360; return `hsl(${h} 55% 45%)`; };
 

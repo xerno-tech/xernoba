@@ -149,7 +149,7 @@ async function aplicarBitrate(call) {
 function enviarPara(id) {
   const a = assistentes.get(id); if (!a || !stream) return;
   if (a.call) try { a.call.close(); } catch (e) {}
-  const call = peer.call(id, stream, { sdpTransform: sdpEstereo, metadata: { tipo: 'video' } });
+  const call = peer.call(id, stream, { sdpTransform: sdpTransmissao, metadata: { tipo: 'video' } });
   a.call = call;
   const pc = call.peerConnection;
   if (pc) pc.addEventListener('connectionstatechange', () => { if (pc.connectionState === 'connected') aplicarBitrate(call); });
