@@ -264,7 +264,7 @@ function pararTransmissao() {
   stream = null; aoVivo = false;
   for (const a of assistentes.values()) if (a.call) try { a.call.close(); } catch (e) {}
   if (telaLocal) {
-    if (telaCinema === telaLocal) sairCinema();
+    telaSaiu(telaLocal);
     if (telaLocal._painel) { clearInterval(telaLocal._painel.tm); telaLocal._painel = null; }
     telaLocal.remove(); telaLocal = null; atualizarVazio();
   }

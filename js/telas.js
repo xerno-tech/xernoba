@@ -13,6 +13,7 @@ function criarTela(id, titulo, local) {
       <button data-a="info" title="Painel de conexão">ⓘ</button>
       <button data-a="cinema" title="Modo cinema (tela cheia com o chat por cima)">🍿</button>
       <button data-a="chatCinema" title="Mostrar/esconder o chat (C)">💬</button>
+      <button data-a="cinemaTodas" title="Cinema com todas as telas / só esta (G)">⊞</button>
       <button data-a="cheia" title="Tela cheia">⛶</button>${local ? '' : '<button data-a="fechar" title="Fechar">✕</button>'}
     </div>`;
   t.querySelector('.n').textContent = titulo;
@@ -45,6 +46,7 @@ function criarTela(id, titulo, local) {
   t.querySelector('[data-a=info]').onclick = e => { e.stopPropagation(); alternarPainel(t, id, local); };
   t.querySelector('[data-a=cinema]').onclick = e => { e.stopPropagation(); entrarCinema(t); };
   t.querySelector('[data-a=chatCinema]').onclick = e => { e.stopPropagation(); alternarChatCinema(); };
+  t.querySelector('[data-a=cinemaTodas]').onclick = e => { e.stopPropagation(); alternarCinemaTodas(t); };
   const f = t.querySelector('[data-a=fechar]'); if (f) f.onclick = () => pararDeAssistir(id);
   v.ondblclick = () => t.querySelector('[data-a=cheia]').click();
   v.onclick = () => { if (t.classList.contains('mini')) minimizar(t, false); else if (layout === 'destaque') focar(t); };
@@ -138,7 +140,7 @@ function pararDeAssistir(id) {
   try { it.conn.close(); } catch (e) {}
   if (it.tela._fonte) try { it.tela._fonte.disconnect(); it.tela._ganho.disconnect(); } catch (e) {}
   if (it.tela._painel) { clearInterval(it.tela._painel.tm); it.tela._painel = null; }
-  if (telaCinema === it.tela) sairCinema();
+  telaSaiu(it.tela);
   it.tela.remove(); atualizarVazio(); renderLista();
 }
 
@@ -197,16 +199,38 @@ function alternarPainel(t, id, local) {
 }
 
 /* =================== MODO CINEMA =================== */
-// move o chat de verdade para dentro da tela em tela cheia; ao sair, ele volta para a barra lateral
-let telaCinema = null;
+// tela cheia com o chat de verdade por cima; ao sair, ele volta para a barra lateral.
+// Pode ser só uma tela, ou a grade com todas as telas (botão ⊞ ou tecla G).
+let telaCinema = null;    // o que está em cinema: uma tela ou a grade inteira
+let telaBaseCinema = null;   // a tela de onde o cinema foi aberto (para voltar a "só esta")
+let cinemaTodas = ler('cinemaTodas') === '1';
+let chatCinemaVisivel = ler('chatCinema') !== '0';
+let trocandoCinema = false;   // saindo da tela cheia de propósito para entrar em outra
+async function ligarCinema(alvo) {
+  if (document.fullscreenElement && document.fullscreenElement !== alvo) {
+    trocandoCinema = true;
+    try { await sairTelaCheia(); } finally { trocandoCinema = false; }
+  }
+  try { await alvo.requestFullscreen(); } catch (e) { toast('O navegador não deixou entrar em tela cheia.', 'aviso'); sairCinema(); return false; }
+  if (telaCinema && telaCinema !== alvo) telaCinema.classList.remove('cinema', 'semChatCinema');
+  telaCinema = alvo; alvo.classList.add('cinema'); alvo.classList.toggle('semChatCinema', !chatCinemaVisivel);
+  alvo.appendChild($('chat'));
+  const box = $('msgs'); box.scrollTop = box.scrollHeight;
+  arrumarFlex();
+  return true;
+}
 async function entrarCinema(t) {
   if (telaCinema) return sairCinema();
-  try { await t.requestFullscreen(); } catch (e) { return toast('O navegador não deixou entrar em tela cheia.', 'aviso'); }
-  telaCinema = t; t.classList.add('cinema'); t.classList.toggle('semChatCinema', !chatCinemaVisivel);
-  t.appendChild($('chat'));
-  const box = $('msgs'); box.scrollTop = box.scrollHeight;
+  telaBaseCinema = t;
+  await ligarCinema(cinemaTodas ? $('grade') : t);
 }
-let chatCinemaVisivel = ler('chatCinema') !== '0';
+function alternarCinemaTodas(t) {
+  cinemaTodas = !cinemaTodas; salvar('cinemaTodas', cinemaTodas ? '1' : '0');
+  if (!telaCinema) return;
+  const base = (t && t.isConnected && t) || (telaBaseCinema && telaBaseCinema.isConnected && telaBaseCinema) || $('grade').querySelector('.tela');
+  if (!cinemaTodas && !base) return sairCinema();
+  ligarCinema(cinemaTodas ? $('grade') : base);
+}
 function alternarChatCinema() {
   chatCinemaVisivel = !chatCinemaVisivel; salvar('chatCinema', chatCinemaVisivel ? '1' : '0');
   if (telaCinema) telaCinema.classList.toggle('semChatCinema', !chatCinemaVisivel);
@@ -215,15 +239,26 @@ function sairCinema() {
   if (!telaCinema) return;
   telaCinema.classList.remove('cinema', 'semChatCinema');
   $('membros').appendChild($('chat'));
-  telaCinema = null;
-  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  telaCinema = null; telaBaseCinema = null;
+  sairTelaCheia();
   const box = $('msgs'); box.scrollTop = box.scrollHeight;
+  arrumarFlex();
 }
-document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && telaCinema) sairCinema(); });
+// trocar entre "só esta" e "todas" empilha telas cheias; sair desfaz todas
+async function sairTelaCheia() {
+  for (let i = 0; i < 10 && document.fullscreenElement; i++) try { await document.exitFullscreen(); } catch (e) { break; }
+}
+// uma tela saindo: se era ela em cinema, sai; se era a grade e não sobrou nenhuma, sai também
+function telaSaiu(t) {
+  if (telaCinema === t) return sairCinema();
+  if (telaCinema === $('grade')) queueMicrotask(() => { if (!$('grade').querySelector('.tela')) sairCinema(); });
+}
+document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && telaCinema && !trocandoCinema) sairCinema(); });
 document.addEventListener('keydown', e => {
   if (!telaCinema || document.activeElement === $('inChat')) return;
   if (e.key === 'Escape') sairCinema();
   else if (e.key === 'c' || e.key === 'C') alternarChatCinema();
+  else if (e.key === 'g' || e.key === 'G') alternarCinemaTodas(null);
 });
 
 /* =================== RABISCOS =================== */
