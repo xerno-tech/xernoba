@@ -60,7 +60,7 @@ export default {
     if (url.pathname === '/jogos/teste') {
       const q = String(url.searchParams.get('q') || 'silent hill').slice(0, 60);
       const { jogos, erro, fontes } = await buscarJogosTodos(q, env);
-      return Response.json({ q, igdbConfigurado: !!(env.IGDB_CLIENT_ID && env.IGDB_CLIENT_SECRET), fontes, achados: jogos.length, primeiros: jogos.slice(0, 6).map(j => j.nome + (j.info ? ' (' + j.info + ')' : '')), erro });
+      return Response.json({ q, igdbConfigurado: !!(env.IGDB_CLIENT_ID && env.IGDB_CLIENT_SECRET), fontes, exatos: ultimosExatos, erroExato: ultimoErroExato, achados: jogos.length, primeiros: jogos.slice(0, 6).map(j => j.nome + (j.info ? ' (' + j.info + ')' : '')), erro });
     }
 
     // busca de jogos (para "O que você vai jogar?"): IGDB se tiver as chaves da Twitch, senão a loja da Steam
@@ -453,7 +453,9 @@ async function consultaIgdb(corpo, env) {
   if (!Array.isArray(j)) throw new Error('IGDB respondeu: ' + JSON.stringify(j).slice(0, 160));
   return j;
 }
+let ultimoErroExato = null, ultimosExatos = 0;
 async function buscarIgdb(q, env, tentou) {
+  ultimoErroExato = null;
   const busca = q.replace(/["\\]/g, ' ').trim();
   const campos = 'fields id, name, first_release_date, cover.image_id, platforms.abbreviation;';
   let porBusca, exatos;
@@ -462,12 +464,13 @@ async function buscarIgdb(q, env, tentou) {
     // e o nome exato, do mais antigo para o mais novo
     [porBusca, exatos] = await Promise.all([
       consultaIgdb(`search "${busca}"; ${campos} where version_parent = null; limit 40;`, env),
-      consultaIgdb(`${campos} where name ~ "${busca}" & version_parent = null; sort first_release_date asc; limit 10;`, env).catch(() => []),
+      consultaIgdb(`${campos} where name ~ "${busca}" & version_parent = null; sort first_release_date asc; limit 10;`, env).catch(e => { ultimoErroExato = String(e.message || e).slice(0, 200); return []; }),
     ]);
   } catch (e) {
     if (!tentou && String(e.message) === 'token renovado') return buscarIgdb(q, env, true);
     throw e;
   }
+  ultimosExatos = exatos.length;
   const alvo = q.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
   const norm = n => String(n || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
   const nota = g => { const n = norm(g.name); return n === alvo ? 0 : n.startsWith(alvo) ? 1 : n.includes(alvo) ? 2 : 3; };
