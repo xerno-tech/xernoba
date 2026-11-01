@@ -92,6 +92,7 @@ function aplicarLayout() {
 function abrirAba(aba) {
   document.querySelectorAll('.abas button').forEach(b => b.classList.toggle('sel', b.dataset.aba === aba));
   document.querySelectorAll('[data-painel]').forEach(p => p.classList.toggle('oculto', p.dataset.painel !== aba));
+  if (aba === 'stats' && typeof mostrarStats === 'function') mostrarStats();
 }
 function desenharPerfil() {
   const eu = { id: '', nome, cor: perfil.cor, emoji: perfil.emoji };
@@ -225,3 +226,6 @@ $('ajDiagnostico').onclick = async () => {
 
 // ---- cor da Midori ----
 seg('ajTema', 'c', document.documentElement.dataset.tema || 'verde', v => { document.documentElement.dataset.tema = v; salvar('tema', v); });
+
+$('ajSonsGalera').checked = ler('sonsGalera') !== '0';
+$('ajSonsGalera').onchange = () => { tocarSonsGalera = $('ajSonsGalera').checked; salvar('sonsGalera', tocarSonsGalera ? '1' : '0'); };

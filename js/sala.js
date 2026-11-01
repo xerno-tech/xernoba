@@ -96,9 +96,10 @@ function virarHub() {
     const comImg = historico.filter(x => x.img && x.img.startsWith('data:'));
     for (const x of comImg.slice(0, Math.max(0, comImg.length - 8))) { x.img = null; x.texto = (x.texto ? x.texto + ' ' : '') + '[imagem]'; }
     for (const c of conns.values()) if (c.open) try { c.send(msg); } catch (e) {}
+    guardarNoHistorico(msg);
   };
   const difundir = () => {
-    const lista = [...roster.values()].map(({ cid: _c, _expulso, ...m }) => m);
+    const lista = [...roster.values()].map(({ cid: _c, _expulso, _did, ...m }) => m);
     const regras = { banidos: [...banidos], nomesBanidos, silenciados: [...silenciados], senhaHash, autorizados: [...autorizados], adminsAvisados: [...adminsAvisados] };
     for (const c of conns.values()) if (c.open) try { c.send({ tipo: 'lista', membros: lista, regras }); } catch (e) {}
   };
@@ -106,9 +107,18 @@ function virarHub() {
   hubPeer.on('open', () => {
     avisoDoHub = registrar;
     anotarConexao(hubAbriu ? '🔁 O organizador (você) voltou ao servidor da Midori' : '🗂️ Você virou o organizador da sala');
+    const primeira = !hubAbriu;
     hubAbriu = true;
     conectarHub();
+    if (primeira) buscarHistorico().then(msgs => {
+      const novas = msgs.filter(m => !historico.some(x => x.uid === m.uid));
+      if (!novas.length) return;
+      historico.unshift(...novas); while (historico.length > 80) historico.shift();
+      for (const c of conns.values()) if (c.open) try { c.send({ tipo: 'historico', msgs: novas }); } catch (e) {}
+    });
   });
+  // estatísticas: um retrato da sala por minuto
+  setInterval(() => { if (hubPeer && hubPeer.open && !saindo) retratoDaSala(roster); }, 60000);
   // quem some sem avisar sai depois de 2,5 min sem sinal (o Chrome atrasa os sinais de abas em segundo plano)
   setInterval(() => { const agora = Date.now(); for (const [id, t] of vistoEm) if (agora - t > 150000) { const c = conns.get(id); vistoEm.delete(id); const m = roster.get(id); if (m) anotarConexao(`⏱️ ${m.nome} ficou 2,5 min sem dar sinal e foi tirado da lista`); if (c) try { c.close(); } catch (e) {} sairDe(id); } }, 5000);
   hubPeer.on('connection', c => {
@@ -143,6 +153,7 @@ function virarHub() {
         const admin = !!(ADMIN_HASH && d.adminKey && await sha256(String(d.adminKey)) === ADMIN_HASH);
         const m = { id: c.peer, cid: ccid, nome: String(d.nome).slice(0, 24), live: !!d.live, voz: !!d.voz, mudo: !!d.mudo || silenciados.has(ccid),
                     ausente: !!d.ausente && !d.live, versao: Number(d.versao) || 0,
+                    jogo: d.live && d.jogo ? String(d.jogo).slice(0, 40) : '', _did: disc && disc.id ? String(disc.id) : (antes && antes._did) || null,
                     vendo: Array.isArray(d.vendo) ? d.vendo.slice(0, 8).map(x => String(x).slice(0, 64)) : [],
                     liveMs: d.live ? Math.max(0, Math.min(Number(d.liveMs) || 0, 7 * 864e5)) : 0,
                     silenciado: silenciados.has(ccid), admin,
@@ -232,6 +243,13 @@ function virarHub() {
         if (!pts.length) return;
         const msg = { tipo: 'risco', alvo: d.alvo, autor: c.peer, novo: !!d.novo, pts, cor: m.cor || corDe(m.nome) };
         for (const x of conns.values()) if (x.open) try { x.send(msg); } catch (e) {}
+      } else if (d.tipo === 'figurinha') {
+        const m = roster.get(c.peer); if (!m || typeof d.id !== 'string' || d.id.length > 40) return;
+        if (Date.now() - (m._ultimaFig || 0) < 2000) return;   // sem metralhadora
+        m._ultimaFig = Date.now();
+        const msg = { tipo: 'figurinha', id: d.id, nome: String(d.nome || '').slice(0, 32), som: !!d.som, autor: m.nome };
+        for (const x of conns.values()) if (x.open) try { x.send(msg); } catch (e) {}
+        registrar(`${m.nome} ${msg.som ? 'tocou 🔊' : 'mandou 🎭'} ${msg.nome}`, null, null, 'nome', c.peer);
       } else if (d.tipo === 'reacao') {
         const m = roster.get(c.peer); if (!m || !REACOES.includes(d.emoji) || !roster.has(d.alvo)) return;
         if (Date.now() - (ultimaReacao.get(c.peer) || 0) < 250) return;   // sem metralhadora
@@ -294,6 +312,7 @@ function conectarHub() {
     else if (d.tipo === 'reacoesMsg') { atualizarChips(d.uid, d.reacoes); }
     else if (d.tipo === 'digitando') { digitandoAgora.set(d.id, { nome: d.nome, ate: Date.now() + 4000 }); mostrarDigitando(); }
     else if (d.tipo === 'reacao') { mostrarReacao(d); }
+    else if (d.tipo === 'figurinha') { receberFig(d); }
     else if (d.tipo === 'risco') { receberRisco(d); }
     else if (d.tipo === 'expulso') { bloquear('expulso'); }
     else if (d.tipo === 'semLogin') { bloqueado = true; salvar('token', ''); salvar('erroLogin', 'sessao'); location.href = location.pathname; }
@@ -313,7 +332,7 @@ let jaEntrei = false;
 function enviarEstado() {
   if (!hubConn || !hubConn.open) return;
   hubConn.send({ tipo: 'estado', nome, live: aoVivo, voz: emVoz, mudo: emVoz && mudo, cor: perfil.cor, emoji: perfil.emoji, voltando: jaEntrei, ausente, versao: VERSAO, liveMs: aoVivo && inicioLive ? Date.now() - inicioLive : 0,
-                 vendo: [...assistindo.keys()].slice(0, 8), cid, senha: senhaSala, adminKey, token: tokenLogin, usarFoto: perfil.foto });
+                 vendo: [...assistindo.keys()].slice(0, 8), jogo: aoVivo ? jogoAtual : '', cid, senha: senhaSala, adminKey, token: tokenLogin, usarFoto: perfil.foto });
   jaEntrei = true;
 }
 setInterval(enviarEstado, 5000);
@@ -326,7 +345,7 @@ $('tituloMembros').onclick = () => { listaFechada = !listaFechada; salvar('lista
 
 // o que a pessoa está fazendo, em poucas palavras
 function statusDe(m) {
-  if (m.live) return 'Ao vivo' + (m._inicioLocal ? ' há ' + duracao(Date.now() - m._inicioLocal).replace('agora', 'pouco') : '');
+  if (m.live) return (m.jogo ? m.jogo + ' · ao vivo' : 'Ao vivo') + (m._inicioLocal ? ' há ' + duracao(Date.now() - m._inicioLocal).replace('agora', 'pouco') : '');
   if (m.ausente) return '🌙 Ausente';
   const vendo = (m.vendo || []).map(id => membros.find(x => x.id === id && x.live)).filter(Boolean);
   const partes = [];

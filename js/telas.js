@@ -132,8 +132,31 @@ function assistir(m) {
   const conn = peer.connect(m.id, { reliable: true, metadata: { tipo: 'assistir' } });
   const item = { conn, call: null, tela };
   assistindo.set(m.id, item);
-  conn.on('close', () => { if (assistindo.get(m.id) === item) pararDeAssistir(m.id); });
+  conn.on('close', () => { if (assistindo.get(m.id) === item) reabrirTela(m.id, 'a ligação fechou'); });
   renderLista(); enviarEstado();
+}
+// reabre sozinho a tela de quem ainda está ao vivo (até 3 vezes seguidas)
+const tentativasTela = new Map();
+function reabrirTela(id, motivo) {
+  const it = assistindo.get(id); if (!it || it._reabrindo) return;
+  const m = membros.find(x => x.id === id && x.live);
+  if (!m) { pararDeAssistir(id); return; }
+  const n = (tentativasTela.get(id) || 0) + 1;
+  if (n > 3) {
+    tentativasTela.delete(id);
+    const aviso = it.tela.querySelector('.aviso');
+    if (aviso) { aviso.textContent = 'Não deu para reabrir a tela de ' + m.nome + '. Clique para tentar de novo.'; aviso.classList.add('clicavel'); aviso.classList.remove('oculto'); aviso.onclick = e => { e.stopPropagation(); pararDeAssistir(id); assistir(m); }; }
+    return;
+  }
+  tentativasTela.set(id, n);
+  it._reabrindo = true;
+  anotarConexao(`🔁 Reabrindo a tela de ${m.nome} (${motivo}; tentativa ${n})`);
+  setTimeout(() => {
+    if (assistindo.get(id) !== it) return;
+    pararDeAssistir(id);
+    const ainda = membros.find(x => x.id === id && x.live);
+    if (ainda) assistir(ainda);
+  }, 1500 * n);
 }
 function pararDeAssistir(id) {
   const it = assistindo.get(id); if (!it) return;

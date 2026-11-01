@@ -10,6 +10,14 @@ keep_vars = true
 name = "SINAL"
 class_name = "Sinal"
 
+[[durable_objects.bindings]]
+name = "DADOS"
+class_name = "Dados"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["Sinal"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["Dados"]

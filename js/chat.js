@@ -115,7 +115,7 @@ function addMsg(m, doHistorico) {
   div.dataset.uid = m.uid; div.dataset.ts = m.ts || 0;
   if (!m.nome) { div.className = 'msg sis'; const t = document.createElement('span'); t.textContent = m.texto; div.append(h, t); }
   else {
-    div.className = 'msg' + (meChamaram ? ' mencao' : '');
+    div.className = 'msg' + (meChamaram && !m.antigo ? ' mencao' : '') + (m.antigo ? ' antiga' : '');
     if (m.resp && m.resp.uid) {
       const c = document.createElement('span'); c.className = 'citacao'; c.title = 'Ir para a mensagem';
       c.append('↩ ', Object.assign(document.createElement('b'), { textContent: m.resp.nome }), ' ' + (m.resp.trecho || ''));

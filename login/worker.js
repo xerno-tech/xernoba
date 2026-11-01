@@ -27,9 +27,38 @@ export default {
     const cors = {
       'Access-Control-Allow-Origin': origem,
       'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Expose-Headers': 'content-type',
       'Access-Control-Allow-Headers': 'content-type',
     };
     if (req.method === 'OPTIONS') return new Response(null, { headers: cors });
+
+    // retransmissão (TURN): credenciais de 24 h geradas pelo Cloudflare, só para quem está logado
+    if (url.pathname === '/turn' && req.method === 'POST') {
+      let corpo = {}; try { corpo = await req.json(); } catch (e) {}
+      if (!(await conferir(String(corpo.token || ''), env.DISCORD_CLIENT_SECRET))) return Response.json({ iceServers: [] }, { headers: cors });
+      if (!env.TURN_KEY_ID || !env.TURN_KEY_TOKEN) return Response.json({ iceServers: [], semTurn: true }, { headers: cors });
+      try {
+        const r = await fetch(`https://rtc.live.cloudflare.com/v1/turn/keys/${env.TURN_KEY_ID}/credentials/generate-ice-servers`, {
+          method: 'POST', headers: { Authorization: 'Bearer ' + env.TURN_KEY_TOKEN, 'content-type': 'application/json' }, body: JSON.stringify({ ttl: 86400 }),
+        });
+        const j = await r.json();
+        // a porta 53 é bloqueada pelos navegadores: tira para não atrasar a conexão
+        const ice = (j.iceServers || []).map(sv => ({ ...sv, urls: [].concat(sv.urls).filter(u => !/:53(\?|$)/.test(u)) })).filter(sv => sv.urls.length);
+        return Response.json({ iceServers: ice }, { headers: cors });
+      } catch (e) { return Response.json({ iceServers: [], erro: true }, { headers: cors }); }
+    }
+
+    // dados guardados da galera: histórico do chat, figurinhas e estatísticas (só para quem está logado)
+    if (url.pathname.startsWith('/dados/') && req.method === 'POST') {
+      let corpo = {}; try { corpo = await req.json(); } catch (e) { return Response.json({ ok: false }, { status: 400, headers: cors }); }
+      const quem = await conferir(String(corpo.token || ''), env.DISCORD_CLIENT_SECRET);
+      if (!quem) return Response.json({ ok: false, erro: 'login' }, { status: 401, headers: cors });
+      const r = await env.DADOS.get(env.DADOS.idFromName('midori')).fetch('https://dados' + url.pathname.slice(6), {
+        method: 'POST', body: JSON.stringify({ ...corpo, token: undefined, eu: { id: quem.id, nome: quem.nome } }),
+      });
+      const h = new Headers(r.headers); for (const [k, v] of Object.entries(cors)) h.set(k, v);
+      return new Response(r.body, { status: r.status, headers: h });
+    }
 
     // servidor de conexão (protocolo do PeerJS)
     if (url.pathname === '/peerjs/id') return new Response(crypto.randomUUID(), { headers: { 'Access-Control-Allow-Origin': origem, 'content-type': 'text/plain' } });
@@ -224,4 +253,112 @@ export class Sinal extends DurableObject {
 
   async webSocketClose(ws, code) { try { ws.close(code === 1005 || code === 1006 ? 1000 : code, 'tchau'); } catch (e) {} }
   async webSocketError(ws) { try { ws.close(1011, 'erro'); } catch (e) {} }
+}
+
+// ---- dados guardados (SQLite do Durable Object) ----
+const MAX_ARQ = 1100000;          // figurinha: até ~1 MB
+const TIPOS_FIG = /^(image\/(png|jpeg|gif|webp)|audio\/(mpeg|ogg|wav|webm|mp4|x-m4a|aac))$/;
+const mesDe = ts => new Date(ts - 3 * 3600e3).toISOString().slice(0, 7);   // mês no horário de Brasília
+export class Dados extends DurableObject {
+  constructor(ctx, env) {
+    super(ctx, env);
+    const sql = this.sql = ctx.storage.sql;
+    sql.exec(`CREATE TABLE IF NOT EXISTS msgs (uid TEXT PRIMARY KEY, sala TEXT, ts INTEGER, json TEXT)`);
+    sql.exec(`CREATE INDEX IF NOT EXISTS msgs_sala ON msgs (sala, ts)`);
+    sql.exec(`CREATE TABLE IF NOT EXISTS figs (id TEXT PRIMARY KEY, nome TEXT, tipo TEXT, autor TEXT, autorNome TEXT, ts INTEGER, tam INTEGER, dados BLOB)`);
+    sql.exec(`CREATE TABLE IF NOT EXISTS minutos (chave TEXT PRIMARY KEY, ts INTEGER)`);
+    sql.exec(`CREATE TABLE IF NOT EXISTS stats (mes TEXT, tipo TEXT, chave TEXT, nome TEXT, valor INTEGER, PRIMARY KEY (mes, tipo, chave))`);
+  }
+  async fetch(req) {
+    const rota = new URL(req.url).pathname;
+    const d = await req.json();
+    const eu = d.eu || {};
+    const json = (x, st = 200) => Response.json(x, { status: st });
+    const sql = this.sql;
+    const sala = String(d.sala || '').slice(0, 32);
+
+    // --- histórico do chat ---
+    if (rota === '/historico') {
+      const linhas = sql.exec(`SELECT json FROM msgs WHERE sala = ? ORDER BY ts DESC LIMIT 80`, sala).toArray();
+      return json({ ok: true, msgs: linhas.reverse().map(l => JSON.parse(l.json)) });
+    }
+    if (rota === '/historico/guardar') {
+      const msgs = Array.isArray(d.msgs) ? d.msgs.slice(0, 40) : [];
+      for (const m of msgs) {
+        if (!m || typeof m.uid !== 'string' || !m.uid || m.uid.length > 40) continue;
+        const limpo = { tipo: 'msg', uid: m.uid, ts: Number(m.ts) || Date.now(), texto: String(m.texto || '').slice(0, 400), nome: m.nome ? String(m.nome).slice(0, 24) : null,
+                        id: null, evento: m.evento ? String(m.evento).slice(0, 12) : null, cor: /^#[0-9a-f]{6}$/i.test(m.cor || '') ? m.cor : null,
+                        img: typeof m.img === 'string' && /^https:\/\//.test(m.img) && m.img.length < 600 ? m.img : null, antigo: true };
+        if (m.resp && typeof m.resp === 'object') limpo.resp = { uid: String(m.resp.uid || '').slice(0, 40), nome: String(m.resp.nome || '').slice(0, 24), trecho: String(m.resp.trecho || '').slice(0, 90) };
+        sql.exec(`INSERT OR IGNORE INTO msgs (uid, sala, ts, json) VALUES (?, ?, ?, ?)`, limpo.uid, sala, limpo.ts, JSON.stringify(limpo));
+      }
+      // cada sala guarda as 200 mais recentes
+      sql.exec(`DELETE FROM msgs WHERE sala = ? AND uid NOT IN (SELECT uid FROM msgs WHERE sala = ? ORDER BY ts DESC LIMIT 200)`, sala, sala);
+      return json({ ok: true });
+    }
+
+    // --- figurinhas (imagens e sons) ---
+    if (rota === '/figs') {
+      const lista = sql.exec(`SELECT id, nome, tipo, autor, autorNome, ts, tam FROM figs ORDER BY ts DESC`).toArray();
+      return json({ ok: true, figs: lista });
+    }
+    if (rota === '/figs/arquivo') {
+      const f = sql.exec(`SELECT tipo, dados FROM figs WHERE id = ?`, String(d.id || '')).toArray()[0];
+      if (!f) return json({ ok: false }, 404);
+      return new Response(f.dados, { headers: { 'content-type': f.tipo, 'cache-control': 'private, max-age=86400' } });
+    }
+    if (rota === '/figs/enviar') {
+      const nome = String(d.nome || '').trim().slice(0, 32), tipo = String(d.tipo || '');
+      if (!nome || !TIPOS_FIG.test(tipo)) return json({ ok: false, erro: 'tipo' }, 400);
+      let bytes;
+      try { bytes = Uint8Array.from(atob(String(d.dados || '')), c => c.charCodeAt(0)); } catch (e) { return json({ ok: false, erro: 'arquivo' }, 400); }
+      if (!bytes.length || bytes.length > MAX_ARQ) return json({ ok: false, erro: 'grande' }, 400);
+      const total = sql.exec(`SELECT COUNT(*) AS n FROM figs`).one().n;
+      if (total >= 300) return json({ ok: false, erro: 'cheio' }, 400);
+      const id = crypto.randomUUID().slice(0, 12);
+      sql.exec(`INSERT INTO figs (id, nome, tipo, autor, autorNome, ts, tam, dados) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, id, nome, tipo, String(eu.id || ''), String(eu.nome || '').slice(0, 32), Date.now(), bytes.length, bytes.buffer);
+      return json({ ok: true, id });
+    }
+    if (rota === '/figs/apagar') {
+      const f = sql.exec(`SELECT autor FROM figs WHERE id = ?`, String(d.id || '')).toArray()[0];
+      if (!f) return json({ ok: false }, 404);
+      if (f.autor !== String(eu.id || '')) return json({ ok: false, erro: 'dono' }, 403);
+      sql.exec(`DELETE FROM figs WHERE id = ?`, String(d.id));
+      return json({ ok: true });
+    }
+
+    // --- estatísticas: o organizador manda um retrato da sala por minuto ---
+    if (rota === '/stats/minuto') {
+      const min = Math.floor(Number(d.minuto) || 0);
+      if (Math.abs(min - Math.floor(Date.now() / 60000)) > 2) return json({ ok: false });
+      const chave = sala + ':' + min;
+      if (sql.exec(`SELECT 1 FROM minutos WHERE chave = ?`, chave).toArray().length) return json({ ok: true, repetido: true });
+      sql.exec(`INSERT INTO minutos (chave, ts) VALUES (?, ?)`, chave, Date.now());
+      sql.exec(`DELETE FROM minutos WHERE ts < ?`, Date.now() - 2 * 864e5);
+      const mes = mesDe(min * 60000);
+      const somar = (tipo, chaveS, nome, n = 1) => sql.exec(
+        `INSERT INTO stats (mes, tipo, chave, nome, valor) VALUES (?, ?, ?, ?, ?) ON CONFLICT (mes, tipo, chave) DO UPDATE SET valor = valor + excluded.valor, nome = excluded.nome`,
+        mes, tipo, String(chaveS).slice(0, 64), String(nome || '').slice(0, 40), n);
+      const pessoas = (Array.isArray(d.pessoas) ? d.pessoas : []).slice(0, 30).filter(p => p && p.did);
+      const ids = new Set(pessoas.map(p => String(p.did)));
+      for (const p of pessoas) {
+        somar('presenca', p.did, p.nome);
+        if (p.live) {
+          somar('transmitiu', p.did, p.nome);
+          const vendo = pessoas.filter(o => (o.vendo || []).includes(p.did)).length;
+          if (p.jogo) somar('jogo', String(p.jogo).toLowerCase().trim(), String(p.jogo).trim(), Math.max(1, vendo));
+        }
+        if ((p.vendo || []).some(v => ids.has(String(v)))) somar('assistiu', p.did, p.nome);
+      }
+      if (pessoas.length >= 2 || pessoas.some(p => p.live)) somar('sala', 'jogatina', 'Jogatina');
+      return json({ ok: true });
+    }
+    if (rota === '/stats') {
+      const mes = /^\d{4}-\d{2}$/.test(d.mes || '') ? d.mes : mesDe(Date.now());
+      const top = tipo => sql.exec(`SELECT chave, nome, valor FROM stats WHERE mes = ? AND tipo = ? ORDER BY valor DESC LIMIT 10`, mes, tipo).toArray();
+      const meses = sql.exec(`SELECT DISTINCT mes FROM stats ORDER BY mes DESC LIMIT 12`).toArray().map(x => x.mes);
+      return json({ ok: true, mes, meses, transmitiu: top('transmitiu'), assistiu: top('assistiu'), presenca: top('presenca'), jogos: top('jogo'), jogatina: (top('sala')[0] || {}).valor || 0 });
+    }
+    return json({ ok: false }, 404);
+  }
 }

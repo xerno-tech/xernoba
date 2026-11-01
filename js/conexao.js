@@ -17,7 +17,8 @@ function mostrarConectando(texto, aviso) {
   const el = $('lista'); if (!el || euId || membros.length) return;
   el.innerHTML = `<div class="conectando${aviso ? ' aviso' : ''}">${texto}</div>`;
 }
-function iniciarConexao() {
+async function iniciarConexao() {
+  await prepararTurn();
   tentativaServidor++; inicioTentativa = Date.now();
   if (tentativaServidor > 1) anotarConexao(`🔄 Tentando de novo ligar ao servidor da Midori (tentativa ${tentativaServidor})`);
   mostrarConectando(tentativaServidor > 3
@@ -82,7 +83,14 @@ function iniciarConexao() {
     });
     const pc = call.peerConnection;
     if (pc) pc.addEventListener('connectionstatechange', () => {
-      if (pc.connectionState === 'failed') { aviso.textContent = 'Não deu para conectar direto com essa pessoa (a rede de um de vocês está bloqueando).'; aviso.classList.remove('oculto', 'clicavel'); }
+      if (pc.connectionState === 'failed') {
+        aviso.textContent = temTurn ? 'A ligação com essa pessoa caiu. Tentando de novo…' : 'Não deu para conectar direto com essa pessoa (a rede de um de vocês está bloqueando).';
+        aviso.classList.remove('oculto', 'clicavel');
+        reabrirTela(call.peer, 'a ligação falhou');
+      } else if (pc.connectionState === 'disconnected') {
+        // às vezes volta sozinha; se em 8 s não voltar, reabre
+        setTimeout(() => { if (pc.connectionState === 'disconnected' && assistindo.get(call.peer) === it) reabrirTela(call.peer, 'a imagem parou de chegar'); }, 8000);
+      } else if (pc.connectionState === 'connected') tentativasTela.delete(call.peer);
     });
   });
 

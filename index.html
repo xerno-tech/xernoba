@@ -15,7 +15,7 @@
 <meta name="twitter:card" content="summary_large_image">
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script>try { document.documentElement.dataset.tema = localStorage.getItem('tema') || 'verde'; } catch (e) {}</script>
-<link rel="stylesheet" href="css/midori.css?v=26">
+<link rel="stylesheet" href="css/midori.css?v=27">
 </head>
 <body>
 <button id="olho" title="Mostrar/ocultar interface"></button>
@@ -93,8 +93,15 @@
         <div id="digitando"></div>
         <div id="popMencao" class="oculto"></div>
         <div id="barraResposta" class="oculto"><span id="txtResposta"></span><button class="link" id="btnCancResp" title="Cancelar">✕</button></div>
+        <div id="popFigs" class="oculto">
+          <div class="topoFigs"><input type="text" id="figsBusca" placeholder="Procurar…"><button class="sec" id="figsEnviar" title="Enviar uma imagem ou um som (até 1 MB)">＋ Enviar</button><button class="link" id="figsFechar" title="Fechar">✕</button></div>
+          <div id="figsGrade"></div>
+          <span class="mut dicaFigs">Imagens aparecem na tela de todo mundo; sons tocam para a sala.</span>
+          <input type="file" id="arqFig" accept="image/png,image/jpeg,image/gif,image/webp,audio/*" hidden>
+        </div>
         <form id="formChat" autocomplete="off">
           <button type="button" class="sec icone" id="btnAnexo" title="Enviar imagem ou GIF do PC (também dá para colar ou arrastar)">📎</button>
+          <button type="button" class="sec icone" id="btnFigs" title="Sons e figurinhas da galera">🎭</button>
           <button type="button" class="sec icone" id="btnTts" title="Ler em voz alta: com isto ligado, suas mensagens são lidas em voz alta para quem está na voz">🗣️</button>
           <input type="text" id="inChat" maxlength="300" placeholder="Mensagem…" title="Escreva uma mensagem. Dá para colar ou arrastar uma imagem aqui; use @ para chamar alguém.">
           <button type="submit" title="Enviar">➤</button>
@@ -124,6 +131,7 @@
         <button class="opcao" data-fonte="tela"><span class="ic">🖥️</span><div><b>Tela inteira</b><span>A tela toda, com o som do PC (sem as conversas)</span></div><span class="seta">›</span></button>
       </div>
       <div class="nota">Em todos os modos, o som do <b>Discord</b> e das conversas <b>não vai</b> para a transmissão.</div>
+      <label class="campo">O que você vai jogar? <span class="mut" style="font-size:12px">(opcional, aparece para a galera e nas estatísticas)</span><input type="text" id="inJogo" maxlength="40" placeholder="Ex.: Elden Ring"></label>
     </div>
 
     <!-- Passo 2: configurar -->
@@ -194,7 +202,7 @@
 <div id="ajustes" class="oculto">
   <div class="caixa">
     <div class="passo" style="padding-bottom:6px"><div class="topo"><h2>⚙️ Ajustes</h2><button class="link" id="fecharAjustes">✕</button></div></div>
-    <div class="abas"><button data-aba="perfil" class="sel">Perfil</button><button data-aba="sons">Sons e avisos</button><button data-aba="layout">Layout</button><button data-aba="conexao">📶 Conexão</button><button data-aba="admin">🛡️ Admin</button></div>
+    <div class="abas"><button data-aba="perfil" class="sel">Perfil</button><button data-aba="sons">Sons e avisos</button><button data-aba="layout">Layout</button><button data-aba="stats">📊 Estatísticas</button><button data-aba="conexao">📶 Conexão</button><button data-aba="admin">🛡️ Admin</button></div>
 
     <div class="passo" data-painel="perfil">
       <div class="linhaPerfil"><div class="avatar" id="prevAvatar"></div><b id="prevNome"></b></div>
@@ -212,6 +220,7 @@
       <label class="marcar"><input type="checkbox" data-som="msg"> Nova mensagem no chat</label>
       <label class="marcar"><input type="checkbox" data-som="live"> Alguém começou a transmitir</label>
       <label class="marcar"><input type="checkbox" data-som="voz"> Alguém entrou ou saiu da voz</label>
+      <label class="marcar"><input type="checkbox" id="ajSonsGalera"> Tocar os sons da galera (🎭)</label>
       <label class="campo">Volume dos sons <input type="range" id="ajVolSom" min="0" max="1" step="0.05" style="accent-color:var(--acc)"></label>
       <div class="campo" style="margin-top:6px">🗣️ Leitura em voz alta (TTS)
         <label class="marcar"><input type="checkbox" id="ajTtsOuvir"> Ouvir as mensagens TTS dos outros (quando eu estiver na voz)</label>
@@ -243,6 +252,11 @@
         <span class="mut" style="font-size:12px">A largura da barra lateral muda arrastando a borda dela.</span>
       </div>
       <label class="marcar"><input type="checkbox" id="ajMuteMini"> Mutar a transmissão quando eu minimizar</label>
+    </div>
+
+    <div class="passo oculto" data-painel="stats">
+      <div class="campo">Mês <select id="statsMes"></select></div>
+      <div id="statsCorpo"></div>
     </div>
 
     <div class="passo oculto" data-painel="conexao">
@@ -281,19 +295,20 @@
 </div>
 
 <!-- Versão desta página. Sobe a cada atualização; quem estiver com uma mais antiga recebe o aviso. -->
-<script>const VERSAO = 26;</script>
-<script src="js/config.js?v=26"></script>
-<script src="js/diagnostico.js?v=26"></script>
-<script src="js/base.js?v=26"></script>
-<script src="js/entrada.js?v=26"></script>
-<script src="js/sala.js?v=26"></script>
-<script src="js/admin.js?v=26"></script>
-<script src="js/voz.js?v=26"></script>
-<script src="js/telas.js?v=26"></script>
-<script src="js/ajustes.js?v=26"></script>
-<script src="js/chat.js?v=26"></script>
-<script src="js/transmissao.js?v=26"></script>
-<script src="js/conexao.js?v=26"></script>
-<script src="js/inicio.js?v=26"></script>
+<script>const VERSAO = 27;</script>
+<script src="js/config.js?v=27"></script>
+<script src="js/diagnostico.js?v=27"></script>
+<script src="js/base.js?v=27"></script>
+<script src="js/entrada.js?v=27"></script>
+<script src="js/sala.js?v=27"></script>
+<script src="js/admin.js?v=27"></script>
+<script src="js/voz.js?v=27"></script>
+<script src="js/telas.js?v=27"></script>
+<script src="js/ajustes.js?v=27"></script>
+<script src="js/chat.js?v=27"></script>
+<script src="js/galera.js?v=27"></script>
+<script src="js/transmissao.js?v=27"></script>
+<script src="js/conexao.js?v=27"></script>
+<script src="js/inicio.js?v=27"></script>
 </body>
 </html>
