@@ -48,6 +48,22 @@ export default {
       } catch (e) { return Response.json({ iceServers: [], erro: true }, { headers: cors }); }
     }
 
+    // busca de jogos (para "O que você vai jogar?"): IGDB se tiver as chaves da Twitch, senão a loja da Steam
+    if (url.pathname === '/jogos' && req.method === 'POST') {
+      let corpo = {}; try { corpo = await req.json(); } catch (e) {}
+      if (!(await conferir(String(corpo.token || ''), env.DISCORD_CLIENT_SECRET))) return Response.json({ ok: false }, { headers: cors });
+      const q = String(corpo.q || '').trim().slice(0, 60);
+      if (q.length < 2) return Response.json({ ok: true, jogos: [] }, { headers: cors });
+      const chaveCache = new Request('https://jogos.midori/' + (env.IGDB_CLIENT_ID ? 'igdb/' : 'steam/') + encodeURIComponent(q.toLowerCase()));
+      const guardado = await caches.default.match(chaveCache);
+      if (guardado) return new Response(guardado.body, { headers: { ...cors, 'content-type': 'application/json' } });
+      let jogos = [];
+      try { jogos = env.IGDB_CLIENT_ID && env.IGDB_CLIENT_SECRET ? await buscarIgdb(q, env) : await buscarSteam(q); } catch (e) {}
+      const resp = JSON.stringify({ ok: true, jogos, fonte: env.IGDB_CLIENT_ID ? 'igdb' : 'steam' });
+      if (jogos.length) await caches.default.put(chaveCache, new Response(resp, { headers: { 'content-type': 'application/json', 'cache-control': 'max-age=86400' } }));
+      return new Response(resp, { headers: { ...cors, 'content-type': 'application/json' } });
+    }
+
     // dados guardados da galera: histórico do chat, figurinhas e estatísticas (só para quem está logado)
     if (url.pathname.startsWith('/dados/') && req.method === 'POST') {
       let corpo = {}; try { corpo = await req.json(); } catch (e) { return Response.json({ ok: false }, { status: 400, headers: cors }); }
@@ -361,4 +377,36 @@ export class Dados extends DurableObject {
     }
     return json({ ok: false }, 404);
   }
+}
+
+// ---- busca de jogos ----
+async function buscarSteam(q) {
+  const r = await fetch(`https://store.steampowered.com/api/storesearch/?term=${encodeURIComponent(q)}&l=portuguese&cc=BR`, { signal: AbortSignal.timeout(5000) });
+  const j = await r.json();
+  return (j.items || []).filter(x => x.type === 'app').slice(0, 8).map(x => ({ nome: x.name, capa: x.tiny_image || null, info: 'PC' }));
+}
+async function tokenTwitch(env) {
+  const chave = new Request('https://jogos.midori/token-twitch');
+  const c = await caches.default.match(chave);
+  if (c) return (await c.json()).t;
+  const r = await fetch(`https://id.twitch.tv/oauth2/token?client_id=${env.IGDB_CLIENT_ID}&client_secret=${env.IGDB_CLIENT_SECRET}&grant_type=client_credentials`, { method: 'POST' });
+  const j = await r.json();
+  if (!j.access_token) throw new Error('twitch');
+  await caches.default.put(chave, new Response(JSON.stringify({ t: j.access_token }), { headers: { 'cache-control': `max-age=${Math.max(60, (j.expires_in || 3600) - 3600)}` } }));
+  return j.access_token;
+}
+async function buscarIgdb(q, env) {
+  const busca = q.replace(/["\\]/g, ' ');
+  const r = await fetch('https://api.igdb.com/v4/games', {
+    method: 'POST', signal: AbortSignal.timeout(5000),
+    headers: { 'Client-ID': env.IGDB_CLIENT_ID, Authorization: 'Bearer ' + await tokenTwitch(env), 'content-type': 'text/plain' },
+    body: `search "${busca}"; fields name, first_release_date, cover.image_id, platforms.abbreviation, version_parent; where version_parent = null; limit 10;`,
+  });
+  const j = await r.json();
+  if (!Array.isArray(j)) return [];
+  return j.slice(0, 8).map(g => ({
+    nome: g.name,
+    capa: g.cover && g.cover.image_id ? `https://images.igdb.com/igdb/image/upload/t_cover_small/${g.cover.image_id}.jpg` : null,
+    info: [g.first_release_date ? new Date(g.first_release_date * 1000).getUTCFullYear() : null, (g.platforms || []).map(p => p.abbreviation).filter(Boolean).slice(0, 4).join(', ')].filter(Boolean).join(' · '),
+  }));
 }

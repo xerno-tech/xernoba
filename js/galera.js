@@ -186,15 +186,65 @@ function retratoDaSala(roster) {
 }
 
 /* =================== O QUE VOCÊ VAI JOGAR =================== */
-let jogoAtual = ler('jogo') || '';
-$('inJogo').value = jogoAtual;
-function definirJogo(v) {
-  jogoAtual = String(v || '').trim().slice(0, 40); salvar('jogo', jogoAtual);
-  $('inJogo').value = jogoAtual; mostrarJogo();
+// busca o jogo num banco de jogos (pelo servidor da Midori) para a pessoa escolher o nome certinho
+let jogoAtual = ler('jogo') || '', jogoCapa = ler('jogoCapa') || '';
+const capaValida = u => typeof u === 'string' && /^https:\/\/(images\.igdb\.com|shared\.(akamai|fastly|cloudflare)\.steamstatic\.com|cdn\.(akamai|cloudflare)\.steamstatic\.com|steamcdn-a\.akamaihd\.net)\//.test(u) && u.length < 300;
+const buscasJogo = new Map();
+function buscarJogos(q) {
+  const k = q.toLowerCase();
+  if (!buscasJogo.has(k)) buscasJogo.set(k, fetch(LOGIN_URL + '/jogos', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: tokenLogin, q }) })
+    .then(r => r.json()).then(r => (r && r.jogos) || []).catch(() => { buscasJogo.delete(k); return []; }));
+  return buscasJogo.get(k);
+}
+function ligarBuscaJogo(input, aoEscolher) {
+  const caixa = input.parentElement.querySelector('.sugestoes');
+  let itens = [], sel = -1, tm = null, vez = 0;
+  const fechar = () => { caixa.classList.add('oculto'); sel = -1; };
+  const escolher = j => { input.value = j.nome; fechar(); aoEscolher(j); };
+  const desenhar = () => {
+    if (!itens.length) { fechar(); return; }
+    caixa.innerHTML = itens.map((j, i) => `<button type="button" class="sug ${i === sel ? 'sel' : ''}" data-i="${i}">${capaValida(j.capa) ? `<img src="${esc(j.capa)}" alt="">` : '<span class="semCapa">🎮</span>'}<span class="t"><b>${esc(j.nome)}</b>${j.info ? `<span>${esc(j.info)}</span>` : ''}</span></button>`).join('');
+    caixa.classList.remove('oculto');
+    caixa.querySelectorAll('.sug').forEach(b => b.onmousedown = e => { e.preventDefault(); escolher(itens[Number(b.dataset.i)]); });
+  };
+  input.addEventListener('input', () => {
+    clearTimeout(tm);
+    const q = input.value.trim();
+    if (q.length < 2 || !temServidorDados()) { itens = []; fechar(); return; }
+    const minha = ++vez;
+    tm = setTimeout(async () => { const r = await buscarJogos(q); if (minha !== vez) return; itens = r; sel = -1; desenhar(); }, 280);
+  });
+  input.addEventListener('keydown', e => {
+    if (e.key === 'ArrowDown' && itens.length) { e.preventDefault(); sel = (sel + 1) % itens.length; desenhar(); }
+    else if (e.key === 'ArrowUp' && itens.length) { e.preventDefault(); sel = (sel - 1 + itens.length) % itens.length; desenhar(); }
+    else if (e.key === 'Enter') { e.preventDefault(); if (sel >= 0 && itens[sel]) escolher(itens[sel]); else { fechar(); aoEscolher({ nome: input.value.trim(), capa: null }); } }
+    else if (e.key === 'Escape') { fechar(); }
+  });
+  input.addEventListener('blur', () => setTimeout(() => {
+    fechar();
+    if (input.value.trim() !== jogoAtual) aoEscolher({ nome: input.value.trim(), capa: null });   // digitou e não escolheu: vale o texto
+  }, 150));
+}
+function definirJogo(j) {
+  jogoAtual = String((j && j.nome) || '').trim().slice(0, 60);
+  jogoCapa = j && capaValida(j.capa) ? j.capa : '';
+  salvar('jogo', jogoAtual); salvar('jogoCapa', jogoCapa);
+  $('inJogo').value = jogoAtual; $('inJogo2').value = jogoAtual; mostrarJogo();
   if (aoVivo) enviarEstado();
 }
-function mostrarJogo() { const b = $('btnJogo'); b.textContent = jogoAtual ? '🎮 ' + jogoAtual : '🎮 Qual jogo?'; b.classList.toggle('semJogo', !jogoAtual); }
-$('inJogo').oninput = () => definirJogo($('inJogo').value);
+function mostrarJogo() {
+  const b = $('btnJogo');
+  b.innerHTML = jogoAtual ? (jogoCapa ? `<img src="${esc(jogoCapa)}" alt="">` : '🎮 ') + esc(jogoAtual) : '🎮 Qual jogo?';
+  b.classList.toggle('semJogo', !jogoAtual);
+}
+$('inJogo').value = jogoAtual;
+ligarBuscaJogo($('inJogo'), definirJogo);
+ligarBuscaJogo($('inJogo2'), j => { definirJogo(j); $('popJogo').classList.add('oculto'); });
 // dá para trocar o jogo durante a transmissão, sem parar
-$('btnJogo').onclick = () => { const v = prompt('O que você está jogando agora?', jogoAtual); if (v !== null) definirJogo(v); };
+$('btnJogo').onclick = e => {
+  e.stopPropagation();
+  const p = $('popJogo'); p.classList.toggle('oculto');
+  if (!p.classList.contains('oculto')) { $('inJogo2').value = jogoAtual; $('inJogo2').focus(); $('inJogo2').select(); }
+};
+document.addEventListener('pointerdown', e => { const p = $('popJogo'); if (!p.classList.contains('oculto') && !p.contains(e.target) && !$('btnJogo').contains(e.target)) p.classList.add('oculto'); });
 mostrarJogo();

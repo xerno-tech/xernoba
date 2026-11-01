@@ -153,7 +153,7 @@ function virarHub() {
         const admin = !!(ADMIN_HASH && d.adminKey && await sha256(String(d.adminKey)) === ADMIN_HASH);
         const m = { id: c.peer, cid: ccid, nome: String(d.nome).slice(0, 24), live: !!d.live, voz: !!d.voz, mudo: !!d.mudo || silenciados.has(ccid),
                     ausente: !!d.ausente && !d.live, versao: Number(d.versao) || 0,
-                    jogo: d.live && d.jogo ? String(d.jogo).slice(0, 40) : '', _did: disc && disc.id ? String(disc.id) : (antes && antes._did) || null,
+                    jogo: d.live && d.jogo ? String(d.jogo).slice(0, 60) : '', jogoCapa: d.live && capaValida(d.jogoCapa) ? d.jogoCapa : null, _did: disc && disc.id ? String(disc.id) : (antes && antes._did) || null,
                     vendo: Array.isArray(d.vendo) ? d.vendo.slice(0, 8).map(x => String(x).slice(0, 64)) : [],
                     liveMs: d.live ? Math.max(0, Math.min(Number(d.liveMs) || 0, 7 * 864e5)) : 0,
                     silenciado: silenciados.has(ccid), admin,
@@ -332,7 +332,7 @@ let jaEntrei = false;
 function enviarEstado() {
   if (!hubConn || !hubConn.open) return;
   hubConn.send({ tipo: 'estado', nome, live: aoVivo, voz: emVoz, mudo: emVoz && mudo, cor: perfil.cor, emoji: perfil.emoji, voltando: jaEntrei, ausente, versao: VERSAO, liveMs: aoVivo && inicioLive ? Date.now() - inicioLive : 0,
-                 vendo: [...assistindo.keys()].slice(0, 8), jogo: aoVivo ? jogoAtual : '', cid, senha: senhaSala, adminKey, token: tokenLogin, usarFoto: perfil.foto });
+                 vendo: [...assistindo.keys()].slice(0, 8), jogo: aoVivo ? jogoAtual : '', jogoCapa: aoVivo ? jogoCapa : '', cid, senha: senhaSala, adminKey, token: tokenLogin, usarFoto: perfil.foto });
   jaEntrei = true;
 }
 setInterval(enviarEstado, 5000);
@@ -452,7 +452,7 @@ function renderLobby() {
     const mini = m.live && !eu ? miniaturasRec.get(m.id) : null;
     return `<div class="cartao ${m.live ? 'live' : ''}" data-id="${esc(m.id)}">
       ${m.live ? `<div class="mini">${mini ? `<img data-mini="${esc(m.id)}" src="${mini}" alt="">` : `<img data-mini="${esc(m.id)}" alt="" class="oculto">`}<span class="selo">AO VIVO</span></div>` : ''}
-      <div class="linha">${avatarHTML(m, m.live ? 'live' : '')}<div class="info"><b>${esc(m.nome)}${eu ? ' <span class="mut">(você)</span>' : ''}</b><span>${esc(statusDe(m))}</span></div>
+      <div class="linha">${avatarHTML(m, m.live ? 'live' : '')}${m.live && m.jogoCapa && capaValida(m.jogoCapa) ? `<img class="capaJogo" src="${esc(m.jogoCapa)}" alt="" title="${esc(m.jogo || '')}">` : ''}<div class="info"><b>${esc(m.nome)}${eu ? ' <span class="mut">(você)</span>' : ''}</b><span>${esc(statusDe(m))}</span></div>
       ${m.live && !eu ? `<button data-assistir="${esc(m.id)}">${assistindo.has(m.id) ? 'Abrir' : 'Assistir'}</button>` : ''}</div>
     </div>`;
   };

@@ -15,7 +15,7 @@
 <meta name="twitter:card" content="summary_large_image">
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script>try { document.documentElement.dataset.tema = localStorage.getItem('tema') || 'verde'; } catch (e) {}</script>
-<link rel="stylesheet" href="css/midori.css?v=28">
+<link rel="stylesheet" href="css/midori.css?v=29">
 </head>
 <body>
 <button id="olho" title="Mostrar/ocultar interface"></button>
@@ -55,6 +55,7 @@
     <span class="esp"></span>
     <div id="aoVivoBox" class="oculto">
       <span class="pilula" id="pilula">AO VIVO</span>
+      <div id="popJogo" class="oculto"><b>O que você está jogando?</b><div class="buscaJogo"><input type="text" id="inJogo2" maxlength="60" placeholder="Digite e escolha o jogo…" autocomplete="off"><div class="sugestoes oculto"></div></div><span class="mut" style="font-size:12px">Enter para usar o que você digitou.</span></div>
       <button class="sec" id="btnJogo" title="Dizer o que você está jogando (aparece para a galera e nas estatísticas)">🎮 Qual jogo?</button>
       <button class="sec" id="btnSom" title="Escolher de onde vem o som">🔊 Som</button>
       <button class="sec" id="btnTrocar">Trocar</button>
@@ -126,13 +127,16 @@
     <!-- Passo 1: escolher a fonte -->
     <div class="passo" id="pFonte">
       <div class="topo"><h2>O que você vai transmitir?</h2><button class="link" data-fechar>✕</button></div>
+      <div class="campo campoJogo">O que você vai jogar? <span class="mut" style="font-size:12px">(opcional, aparece para a galera e nas estatísticas)</span>
+        <div class="buscaJogo"><input type="text" id="inJogo" maxlength="60" placeholder="Digite e escolha o jogo… ex.: Elden Ring" autocomplete="off"><div class="sugestoes oculto"></div></div>
+      </div>
       <div class="opcoes">
         <button class="opcao" data-fonte="console"><span class="ic">🎮</span><div><b>Console</b><span>Pela placa de captura (ou uma câmera)</span></div><span class="seta">›</span></button>
         <button class="opcao" data-fonte="janela"><span class="ic">🕹️</span><div><b>Jogo do PC</b><span>Uma janela ou guia, com o som só dela</span></div><span class="seta">›</span></button>
         <button class="opcao" data-fonte="tela"><span class="ic">🖥️</span><div><b>Tela inteira</b><span>A tela toda, com o som do PC (sem as conversas)</span></div><span class="seta">›</span></button>
       </div>
       <div class="nota">Em todos os modos, o som do <b>Discord</b> e das conversas <b>não vai</b> para a transmissão.</div>
-      <label class="campo">O que você vai jogar? <span class="mut" style="font-size:12px">(opcional, aparece para a galera e nas estatísticas)</span><input type="text" id="inJogo" maxlength="40" placeholder="Ex.: Elden Ring"></label>
+
     </div>
 
     <!-- Passo 2: configurar -->
@@ -314,20 +318,20 @@
 </div>
 
 <!-- Versão desta página. Sobe a cada atualização; quem estiver com uma mais antiga recebe o aviso. -->
-<script>const VERSAO = 28;</script>
-<script src="js/config.js?v=28"></script>
-<script src="js/diagnostico.js?v=28"></script>
-<script src="js/base.js?v=28"></script>
-<script src="js/entrada.js?v=28"></script>
-<script src="js/sala.js?v=28"></script>
-<script src="js/admin.js?v=28"></script>
-<script src="js/voz.js?v=28"></script>
-<script src="js/telas.js?v=28"></script>
-<script src="js/ajustes.js?v=28"></script>
-<script src="js/chat.js?v=28"></script>
-<script src="js/galera.js?v=28"></script>
-<script src="js/transmissao.js?v=28"></script>
-<script src="js/conexao.js?v=28"></script>
-<script src="js/inicio.js?v=28"></script>
+<script>const VERSAO = 29;</script>
+<script src="js/config.js?v=29"></script>
+<script src="js/diagnostico.js?v=29"></script>
+<script src="js/base.js?v=29"></script>
+<script src="js/entrada.js?v=29"></script>
+<script src="js/sala.js?v=29"></script>
+<script src="js/admin.js?v=29"></script>
+<script src="js/voz.js?v=29"></script>
+<script src="js/telas.js?v=29"></script>
+<script src="js/ajustes.js?v=29"></script>
+<script src="js/chat.js?v=29"></script>
+<script src="js/galera.js?v=29"></script>
+<script src="js/transmissao.js?v=29"></script>
+<script src="js/conexao.js?v=29"></script>
+<script src="js/inicio.js?v=29"></script>
 </body>
 </html>
