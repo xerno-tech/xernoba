@@ -43,7 +43,7 @@ const assistindo = new Map();    // quem eu assisto: id -> {conn, call, tela}
 /* ---- Hub: organiza a lista da sala (o primeiro a entrar assume) ---- */
 function virarHub() {
   if (hubPeer || bloqueado || saindo) return;
-  hubPeer = new Peer(HUB);
+  hubPeer = new Peer(HUB, OPCOES_PEER);
   const roster = new Map(), conns = new Map();
   const historico = [];
   const miniaturas = new Map();   // quem está ao vivo -> última miniatura
@@ -105,7 +105,7 @@ function virarHub() {
   let hubAbriu = false;
   hubPeer.on('open', () => {
     avisoDoHub = registrar;
-    anotarConexao(hubAbriu ? '🔁 O organizador (você) voltou ao servidor do PeerJS' : '🗂️ Você virou o organizador da sala');
+    anotarConexao(hubAbriu ? '🔁 O organizador (você) voltou ao servidor da Midori' : '🗂️ Você virou o organizador da sala');
     hubAbriu = true;
     conectarHub();
   });
@@ -251,7 +251,7 @@ function virarHub() {
   hubPeer.on('error', e => { if (e.type === 'unavailable-id') { try { hubPeer.destroy(); } catch (x) {} hubPeer = null; conectarHub(); } });
   hubPeer.on('disconnected', () => {
     if (!hubPeer || hubPeer.destroyed) return;   // tentativa de virar organizador que não deu certo
-    if (hubAbriu) anotarConexao('📡 O organizador (você) caiu do servidor do PeerJS; reconectando');
+    if (hubAbriu) anotarConexao('📡 O organizador (você) caiu do servidor da Midori; reconectando');
     try { hubPeer.reconnect(); } catch (e) {}
   });
   setInterval(difundir, 5000);

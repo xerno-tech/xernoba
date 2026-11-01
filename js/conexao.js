@@ -19,16 +19,16 @@ function mostrarConectando(texto, aviso) {
 }
 function iniciarConexao() {
   tentativaServidor++; inicioTentativa = Date.now();
-  if (tentativaServidor > 1) anotarConexao(`🔄 Tentando de novo ligar ao servidor do PeerJS (tentativa ${tentativaServidor})`);
+  if (tentativaServidor > 1) anotarConexao(`🔄 Tentando de novo ligar ao servidor da Midori (tentativa ${tentativaServidor})`);
   mostrarConectando(tentativaServidor > 3
-    ? '⚠️ O servidor do PeerJS não está respondendo. A Midori continua tentando sozinha; pode deixar a aba aberta.'
+    ? '⚠️ O servidor da Midori não está respondendo. A Midori continua tentando sozinha; pode deixar a aba aberta.'
     : tentativaServidor > 1 ? `Conectando ao servidor… (tentativa ${tentativaServidor})` : 'Conectando ao servidor…', tentativaServidor > 3);
-  peer = new Peer();
+  peer = new Peer(OPCOES_PEER);
   clearTimeout(tServidor);
   const estePeer = peer;
   tServidor = setTimeout(() => {
     if (peer !== estePeer || euId || saindo) return;
-    anotarConexao('⏳ O servidor do PeerJS não respondeu em 15 s');
+    anotarConexao('⏳ O servidor da Midori não respondeu em 15 s');
     try { estePeer.destroy(); } catch (e) {}
     iniciarConexao();
   }, 15000);
@@ -37,7 +37,7 @@ function iniciarConexao() {
     clearTimeout(tServidor);
     mostrarConectando('Entrando na sala…');
     const seg = ((Date.now() - inicioTentativa) / 1000).toFixed(1);
-    anotarConexao(`🟢 Ligado ao servidor do PeerJS em ${seg} s` + (tentativaServidor > 1 ? ` (tentativa ${tentativaServidor})` : ''));
+    anotarConexao(`🟢 Ligado ao servidor da Midori em ${seg} s` + (tentativaServidor > 1 ? ` (tentativa ${tentativaServidor})` : ''));
     euId = id; virarHub(); setTimeout(() => { if (!hubConn) conectarHub(); }, 800);
   });
 
@@ -96,7 +96,7 @@ function iniciarConexao() {
     }
     if (e.type !== 'peer-unavailable') anotarConexao(`❗ Erro de conexão: ${e.type}`);
   });
-  peer.on('disconnected', () => { if (peer !== estePeer || estePeer.destroyed) return; anotarConexao('📡 Você caiu do servidor do PeerJS (as telas e a voz continuam); reconectando'); setTimeout(() => { try { peer.reconnect(); } catch (e) {} }, 2000); });
+  peer.on('disconnected', () => { if (peer !== estePeer || estePeer.destroyed) return; anotarConexao('📡 Você caiu do servidor da Midori (as telas e a voz continuam); reconectando'); setTimeout(() => { try { peer.reconnect(); } catch (e) {} }, 2000); });
   if (saidaLigada) return; saidaLigada = true;
   window.addEventListener('beforeunload', () => { if (avisoDoHub) avisoDoHub(`${nome} saiu da sala`, null, null, 'saiu', euId); saindo = true; try { hubConn && hubConn.open && hubConn.send({ tipo: 'tchau' }); } catch (e) {} try { peer.destroy(); } catch (e) {} try { hubPeer && hubPeer.destroy(); } catch (e) {} });
 }
