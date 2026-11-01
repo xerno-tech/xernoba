@@ -222,3 +222,6 @@ $('ajDiagnostico').onclick = async () => {
   const saida = $('diagSaida'); saida.textContent = txt; saida.classList.remove('oculto');
   navigator.clipboard.writeText(txt).then(() => toast('Diagnóstico copiado. É só colar.'), () => toast('Não deu para copiar: selecione o texto e copie à mão.', 'aviso'));
 };
+
+// ---- cor da Midori ----
+seg('ajTema', 'c', document.documentElement.dataset.tema || 'verde', v => { document.documentElement.dataset.tema = v; salvar('tema', v); });

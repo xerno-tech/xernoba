@@ -109,7 +109,9 @@ function minimizar(t, sim) {
 }
 
 function atualizarVazio() {
-  $('vazio').classList.toggle('oculto', document.querySelectorAll('#palco .tela').length > 0);
+  const vazio = document.querySelectorAll('#palco .tela').length === 0;
+  $('vazio').classList.toggle('oculto', !vazio);
+  document.body.classList.toggle('palcoVazio', vazio);
   $('faixaMini').classList.toggle('oculto', !$('faixaMini').children.length);
   atualizarFoco();
   if (typeof arrumarFlex === 'function') requestAnimationFrame(arrumarFlex);
@@ -131,7 +133,7 @@ function assistir(m) {
   const item = { conn, call: null, tela };
   assistindo.set(m.id, item);
   conn.on('close', () => { if (assistindo.get(m.id) === item) pararDeAssistir(m.id); });
-  renderLista();
+  renderLista(); enviarEstado();
 }
 function pararDeAssistir(id) {
   const it = assistindo.get(id); if (!it) return;
@@ -141,7 +143,7 @@ function pararDeAssistir(id) {
   if (it.tela._fonte) try { it.tela._fonte.disconnect(); it.tela._ganho.disconnect(); } catch (e) {}
   if (it.tela._painel) { clearInterval(it.tela._painel.tm); it.tela._painel = null; }
   telaSaiu(it.tela);
-  it.tela.remove(); atualizarVazio(); renderLista();
+  it.tela.remove(); atualizarVazio(); renderLista(); enviarEstado();
 }
 
 /* =================== PAINEL DE CONEXÃO =================== */

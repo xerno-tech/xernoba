@@ -34,7 +34,40 @@ $('btnDiscord').onclick = () => { salvar('maior18', '1'); location.href = LOGIN_
 $('btnSo18').onclick = () => { salvar('maior18', '1'); $('portao').classList.add('oculto'); $('entrada').classList.remove('oculto'); };
 const bloqueadoPeloPortao = mostrarPortao();
 if (!bloqueadoPeloPortao) $('entrada').classList.remove('oculto');
-if (dadosLogin()) { $('infoDiscord').textContent = '✅ Conectado pelo Discord como ' + dadosLogin().nome; $('infoDiscord').classList.remove('oculto'); }
+if (dadosLogin()) {
+  const d = dadosLogin();
+  const foto = d.id && d.avatar ? `https://cdn.discordapp.com/avatars/${d.id}/${d.avatar}.png?size=64` : null;
+  $('infoDiscord').innerHTML = (foto ? `<img src="${foto}" alt="">` : '') + `<span>Conectado pelo Discord como <b>${esc(d.nome)}</b></span>`;
+  $('infoDiscord').classList.remove('oculto');
+}
+
+// quem já está na sala, antes de entrar (pergunta ao organizador e desliga)
+let espiaPeer = null, tEspia = null;
+function espiarSala() {
+  clearTimeout(tEspia);
+  const sala = limpar($('inSala').value), box = $('quemTa');
+  if (!sala || (LOGIN_URL && !tokenLogin) || !$('sala').classList.contains('oculto')) { box.classList.add('oculto'); return; }
+  tEspia = setTimeout(() => {
+    try { espiaPeer && espiaPeer.destroy(); } catch (e) {}
+    const p = espiaPeer = new Peer(OPCOES_PEER);
+    const fim = () => { try { p.destroy(); } catch (e) {} if (espiaPeer === p) espiaPeer = null; };
+    setTimeout(fim, 8000);
+    p.on('error', e => { if (e.type === 'peer-unavailable' && espiaPeer === p) { box.innerHTML = '<span class="mut">Ninguém nessa sala ainda. Você vai ser o primeiro.</span>'; box.classList.remove('oculto'); } fim(); });
+    p.on('open', () => {
+      const c = p.connect('telinha-hub-' + sala, { reliable: true });
+      c.on('open', () => c.send({ tipo: 'espiar', token: tokenLogin }));
+      c.on('data', d => {
+        if (!d || d.tipo !== 'espiada' || espiaPeer !== p) return;
+        const n = d.nomes || [];
+        box.innerHTML = !n.length ? '<span class="mut">Ninguém nessa sala ainda. Você vai ser o primeiro.</span>'
+          : `<span class="ponto"></span><span><b>${n.slice(0, 3).map(esc).join(', ')}</b>${n.length > 3 ? ` e mais ${n.length - 3}` : ''} ${n.length === 1 ? 'está' : 'estão'} aqui` + (d.live && d.live.length ? ` · <b style="color:#ff8f9a">${d.live.map(esc).join(', ')}</b> ao vivo` : '') + '</span>';
+        box.classList.remove('oculto'); fim();
+      });
+    });
+  }, 500);
+}
+$('inSala').addEventListener('input', espiarSala);
+setTimeout(() => { if (!bloqueadoPeloPortao) espiarSala(); }, 0);   // depois que o nome da sala salvo for preenchido
 
 /* ---------- Entrada ---------- */
 const params = new URLSearchParams(location.search);
@@ -47,6 +80,7 @@ $('btnEntrar').onclick = () => {
   if (!sala) return $('inSala').focus();
   salvar('nome', nome); salvar('sala', sala);
   history.replaceState(null, '', location.pathname + '?sala=' + sala);
+  try { espiaPeer && espiaPeer.destroy(); } catch (e) {}
   entrar(nome, sala);
 };
 for (const id of ['inNome', 'inSala']) $(id).addEventListener('keydown', e => { if (e.key === 'Enter') $('btnEntrar').click(); });

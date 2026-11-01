@@ -117,6 +117,14 @@ function virarHub() {
       if (!d || c._fora) return;   // conexão recusada: ignora o que vier depois
       vistoEm.set(c.peer, Date.now());
       if (d.tipo === 'tchau') { sairDe(c.peer, true); return; }
+      // alguém na tela de entrada quer saber quem já está aqui (só nomes, e só com login válido)
+      if (d.tipo === 'espiar') {
+        c._fora = true;
+        const ok = await pulseiraValida(d.token);
+        try { if (ok && !senhaHash) c.send({ tipo: 'espiada', nomes: [...roster.values()].map(m => m.nome).slice(0, 12), live: [...roster.values()].filter(m => m.live).map(m => m.nome).slice(0, 6) }); } catch (e) {}
+        setTimeout(() => { try { c.close(); } catch (e) {} conns.delete(c.peer); vistoEm.delete(c.peer); }, 300);
+        return;
+      }
       if (d.tipo === 'estado') {
         const antes = roster.get(c.peer);
         const ccid = String(d.cid || '').slice(0, 40);
@@ -135,6 +143,7 @@ function virarHub() {
         const admin = !!(ADMIN_HASH && d.adminKey && await sha256(String(d.adminKey)) === ADMIN_HASH);
         const m = { id: c.peer, cid: ccid, nome: String(d.nome).slice(0, 24), live: !!d.live, voz: !!d.voz, mudo: !!d.mudo || silenciados.has(ccid),
                     ausente: !!d.ausente && !d.live, versao: Number(d.versao) || 0,
+                    vendo: Array.isArray(d.vendo) ? d.vendo.slice(0, 8).map(x => String(x).slice(0, 64)) : [],
                     liveMs: d.live ? Math.max(0, Math.min(Number(d.liveMs) || 0, 7 * 864e5)) : 0,
                     silenciado: silenciados.has(ccid), admin,
                     foto: d.usarFoto && disc && disc.id && disc.avatar ? `https://cdn.discordapp.com/avatars/${disc.id}/${disc.avatar}.png?size=64` : null,
@@ -281,7 +290,7 @@ function conectarHub() {
   conn.on('data', d => {
     if (!d) return;
     if (d.tipo === 'lista') { for (const m of d.membros) if (m.live) m._inicioLocal = Date.now() - (m.liveMs || 0); membros = d.membros; if (d.regras) regrasSala = d.regras; renderLista(); atualizarAdminUI(); atualizarEspectadores(); }
-    else if (d.tipo === 'thumb') { miniaturasRec.set(d.id, d.img); if (previaDe === d.id) $('previaHover').querySelector('img').src = d.img; }
+    else if (d.tipo === 'thumb') { miniaturasRec.set(d.id, d.img); if (previaDe === d.id) $('previaHover').querySelector('img').src = d.img; const li = document.querySelector(`#vazio [data-mini="${CSS.escape(d.id)}"]`); if (li) li.src = d.img; }
     else if (d.tipo === 'reacoesMsg') { atualizarChips(d.uid, d.reacoes); }
     else if (d.tipo === 'digitando') { digitandoAgora.set(d.id, { nome: d.nome, ate: Date.now() + 4000 }); mostrarDigitando(); }
     else if (d.tipo === 'reacao') { mostrarReacao(d); }
@@ -304,24 +313,42 @@ let jaEntrei = false;
 function enviarEstado() {
   if (!hubConn || !hubConn.open) return;
   hubConn.send({ tipo: 'estado', nome, live: aoVivo, voz: emVoz, mudo: emVoz && mudo, cor: perfil.cor, emoji: perfil.emoji, voltando: jaEntrei, ausente, versao: VERSAO, liveMs: aoVivo && inicioLive ? Date.now() - inicioLive : 0,
-                 cid, senha: senhaSala, adminKey, token: tokenLogin, usarFoto: perfil.foto });
+                 vendo: [...assistindo.keys()].slice(0, 8), cid, senha: senhaSala, adminKey, token: tokenLogin, usarFoto: perfil.foto });
   jaEntrei = true;
 }
 setInterval(enviarEstado, 5000);
 
 /* ---- Lista de quem está na sala ---- */
+// lista de pessoas recolhível, para sobrar espaço para o chat
+let listaFechada = ler('listaFechada') === '1';
+document.body.classList.toggle('listaFechada', listaFechada);
+$('tituloMembros').onclick = () => { listaFechada = !listaFechada; salvar('listaFechada', listaFechada ? '1' : ''); document.body.classList.toggle('listaFechada', listaFechada); renderLista(); };
+
+// o que a pessoa está fazendo, em poucas palavras
+function statusDe(m) {
+  if (m.live) return 'Ao vivo' + (m._inicioLocal ? ' há ' + duracao(Date.now() - m._inicioLocal).replace('agora', 'pouco') : '');
+  if (m.ausente) return '🌙 Ausente';
+  const vendo = (m.vendo || []).map(id => membros.find(x => x.id === id && x.live)).filter(Boolean);
+  const partes = [];
+  if (vendo.length === 1) partes.push('Assistindo ' + vendo[0].nome);
+  else if (vendo.length > 1) partes.push(`Assistindo ${vendo.length} telas`);
+  if (m.voz) partes.push(m.mudo ? 'na voz (mudo)' : 'na voz');
+  if (!partes.length) return 'Na sala';
+  const t = partes.join(' · ');
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
 function renderLista() {
   const el = $('lista');
   el.innerHTML = '';
   document.querySelectorAll('body > .admMenu').forEach(x => x.remove());
-  $('tituloMembros').textContent = `Na sala · ${membros.length}`;
+  $('tituloMembros').innerHTML = `Na sala · ${membros.length} <span class="seta">${listaFechada ? '▸' : '▾'}</span>`;
   const versaoMaisNova = Math.max(0, ...membros.map(m => m.versao || 0));
   const ordenados = [...membros].sort((a, b) => (b.live - a.live) || a.nome.localeCompare(b.nome));
   for (const m of ordenados) {
     const eu = m.id === euId;
     const div = document.createElement('div');
     div.className = 'membro';
-    const status = m.live ? 'Ao vivo' + (m._inicioLocal ? ' · ' + duracao(Date.now() - m._inicioLocal) : '') : m.ausente ? '🌙 Ausente' : m.voz ? (m.mudo ? 'Na voz · mudo' : 'Na voz') : 'Assistindo';
+    const status = statusDe(m);
     div.innerHTML = `${avatarHTML(m, (m.live ? 'live' : '') + (m.ausente ? ' ausente' : ''))}
       <div class="info"><span class="n">${esc(m.nome)}${m.admin ? '<span class="escudo" title="Admin">🛡️</span>' : ''}${(m.versao || 0) < versaoMaisNova ? '<span class="escudo" title="Está com uma versão antiga da Midori. Peça para atualizar (Ctrl+F5).">⚠️</span>' : ''}${eu ? ' <span class="mut">(você)</span>' : ''}</span>
       <span class="s ${m.live ? 'live' : ''}">${status}</span></div>
@@ -378,6 +405,7 @@ function renderLista() {
       div.onmouseleave = esconderPrevia;
     }
   }
+  renderLobby();
   for (const id of [...miniaturasRec.keys()]) if (!membros.some(m => m.id === id && m.live)) miniaturasRec.delete(id);
   for (const id of [...assistindo.keys()]) if (!membros.some(m => m.id === id && m.live)) pararDeAssistir(id);
   sincronizarVoz();
@@ -393,3 +421,37 @@ setInterval(() => {
   const agora = !aoVivo && Date.now() - ultimaAtividade > 10 * 60000;
   if (agora !== ausente) { ausente = agora; enviarEstado(); }
 }, 20000);
+
+/* =================== LOBBY (palco vazio) =================== */
+// em vez de um espaço vazio: quem está na sala, quem está ao vivo (com miniatura) e os botões principais
+function renderLobby() {
+  const el = $('vazio'); if (!el) return;
+  const ordenados = [...membros].sort((a, b) => (b.live - a.live) || a.nome.localeCompare(b.nome));
+  const aoVivoOutros = ordenados.filter(m => m.live && m.id !== euId);
+  const cartao = m => {
+    const eu = m.id === euId;
+    const mini = m.live && !eu ? miniaturasRec.get(m.id) : null;
+    return `<div class="cartao ${m.live ? 'live' : ''}" data-id="${esc(m.id)}">
+      ${m.live ? `<div class="mini">${mini ? `<img data-mini="${esc(m.id)}" src="${mini}" alt="">` : `<img data-mini="${esc(m.id)}" alt="" class="oculto">`}<span class="selo">AO VIVO</span></div>` : ''}
+      <div class="linha">${avatarHTML(m, m.live ? 'live' : '')}<div class="info"><b>${esc(m.nome)}${eu ? ' <span class="mut">(você)</span>' : ''}</b><span>${esc(statusDe(m))}</span></div>
+      ${m.live && !eu ? `<button data-assistir="${esc(m.id)}">${assistindo.has(m.id) ? 'Abrir' : 'Assistir'}</button>` : ''}</div>
+    </div>`;
+  };
+  const titulo = aoVivoOutros.length
+    ? `<h2>${aoVivoOutros.length === 1 ? `${esc(aoVivoOutros[0].nome)} está ao vivo` : `${aoVivoOutros.length} pessoas ao vivo`}</h2><p>Clique em <b>Assistir</b> para abrir a tela aqui.</p>`
+    : membros.length > 1 ? '<h2>Ninguém transmitindo ainda</h2><p>Que tal ser o primeiro? O seu jogo aparece para todo mundo da sala.</p>'
+    : '<h2>Você é o primeiro aqui</h2><p>Mande o link da sala para a galera e comece a transmitir.</p>';
+  el.innerHTML = `<div class="lobby">
+    <img class="logoLobby" src="img/logo.png" alt="">
+    ${titulo}
+    <div class="acoes">
+      ${aoVivo ? '' : '<button data-acao="transmitir">📡 Transmitir</button>'}
+      ${emVoz ? '' : '<button class="sec" data-acao="voz">🎙️ Entrar na voz</button>'}
+      <button class="sec" data-acao="link">🔗 Copiar link da sala</button>
+    </div>
+    <div class="cartoes">${ordenados.map(cartao).join('')}</div>
+  </div>`;
+  const alvo = { transmitir: 'btnTransmitir', voz: 'btnVoz', link: 'btnLink' };
+  el.querySelectorAll('[data-acao]').forEach(b => b.onclick = () => $(alvo[b.dataset.acao]).click());
+  el.querySelectorAll('[data-assistir]').forEach(b => b.onclick = () => { const m = membros.find(x => x.id === b.dataset.assistir); if (m) assistir(m); });
+}

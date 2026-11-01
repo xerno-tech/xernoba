@@ -314,7 +314,7 @@ function atualizarBotaoTts() {
   $('btnTts').classList.toggle('ativo', ttsLigado);
   $('btnTts').title = ttsLigado ? 'Modo TTS ligado: suas mensagens são lidas em voz alta para quem está na voz (clique para desligar)'
                                 : 'Modo TTS: suas mensagens são lidas em voz alta para quem está na voz';
-  $('inChat').placeholder = ttsLigado ? '🗣️ Mensagem (vai ser lida em voz alta)…' : 'Mensagem, ou cole uma imagem…';
+  $('inChat').placeholder = ttsLigado ? '🗣️ Mensagem (vai ser lida em voz alta)…' : 'Mensagem…';
 }
 $('btnTts').onclick = () => {
   if (!temTts) return toast('Este navegador não tem leitura em voz alta.', 'aviso');

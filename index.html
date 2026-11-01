@@ -14,7 +14,8 @@
 <meta property="og:url" content="https://xerno-tech.github.io/xernoba/">
 <meta name="twitter:card" content="summary_large_image">
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
-<link rel="stylesheet" href="css/midori.css?v=25">
+<script>try { document.documentElement.dataset.tema = localStorage.getItem('tema') || 'verde'; } catch (e) {}</script>
+<link rel="stylesheet" href="css/midori.css?v=26">
 </head>
 <body>
 <button id="olho" title="Mostrar/ocultar interface"></button>
@@ -25,7 +26,8 @@
 
 <!-- ================= ENTRADA ================= -->
 <div id="portao" class="oculto">
-  <h1><img class="logoIcone" src="img/logo.png" alt=""> Midori Xernoba</h1>
+  <img class="logoGrande" src="img/logo.png" alt="">
+  <h1>Midori Xernoba</h1>
   <p>Espaço fechado do grupo, só para adultos.</p>
   <label class="marcar" style="color:var(--txt)"><input type="checkbox" id="chk18"> Tenho 18 anos ou mais</label>
   <button id="btnDiscord" class="oculto" disabled>Entrar com Discord</button>
@@ -34,12 +36,14 @@
 </div>
 
 <div id="entrada" class="oculto">
-  <h1><img class="logoIcone" src="img/logo.png" alt=""> Midori Xernoba</h1>
+  <img class="logoGrande" src="img/logo.png" alt="">
+  <h1>Midori Xernoba</h1>
   <p>Transmita seu jogo para os amigos, direto do navegador.</p>
   <label class="campo">Seu nome <input type="text" id="inNome" maxlength="24" placeholder="Ex.: Xernoba" autocomplete="nickname"></label>
   <label class="campo">Sala <input type="text" id="inSala" maxlength="32" placeholder="Ex.: galera-x7k2"></label>
+  <div id="quemTa" class="oculto"></div>
   <button id="btnEntrar">Entrar na sala</button>
-  <span class="mut oculto" id="infoDiscord" style="font-size:12px"></span>
+  <div id="infoDiscord" class="oculto"></div>
 </div>
 
 <!-- ================= SALA ================= -->
@@ -82,7 +86,7 @@
   <div id="corpo">
     <div id="membros">
       <div id="alcaLateral" title="Arraste para mudar a largura (dois cliques volta ao normal)"></div>
-      <div id="areaLista"><h2 id="tituloMembros">Na sala</h2><div id="lista"></div></div>
+      <div id="areaLista"><h2 id="tituloMembros" title="Mostrar/esconder a lista">Na sala</h2><div id="lista"></div></div>
       <div id="chat">
         <h2>Chat</h2>
         <div id="msgs"></div>
@@ -90,9 +94,9 @@
         <div id="popMencao" class="oculto"></div>
         <div id="barraResposta" class="oculto"><span id="txtResposta"></span><button class="link" id="btnCancResp" title="Cancelar">✕</button></div>
         <form id="formChat" autocomplete="off">
-          <button type="button" class="sec icone" id="btnAnexo" title="Enviar imagem ou GIF do PC">📎</button>
-          <button type="button" class="sec icone" id="btnTts" title="Modo TTS: suas mensagens são lidas em voz alta para quem está na voz">🗣️</button>
-          <input type="text" id="inChat" maxlength="300" placeholder="Mensagem, ou cole uma imagem…">
+          <button type="button" class="sec icone" id="btnAnexo" title="Enviar imagem ou GIF do PC (também dá para colar ou arrastar)">📎</button>
+          <button type="button" class="sec icone" id="btnTts" title="Ler em voz alta: com isto ligado, suas mensagens são lidas em voz alta para quem está na voz">🗣️</button>
+          <input type="text" id="inChat" maxlength="300" placeholder="Mensagem…" title="Escreva uma mensagem. Dá para colar ou arrastar uma imagem aqui; use @ para chamar alguém.">
           <button type="submit" title="Enviar">➤</button>
           <input type="file" id="arqImg" accept="image/*" hidden>
         </form>
@@ -100,7 +104,7 @@
     </div>
     <div id="palco">
     <div id="grade">
-      <div id="vazio"><div class="grande">🍿</div>Ninguém na tela ainda.<br>Clique em <b>Assistir</b> ao lado de quem está <b style="color:#ff8f9a">ao vivo</b>, ou em <b>Transmitir</b> para mostrar o seu jogo.</div>
+      <div id="vazio"></div>
     </div>
     <div id="faixaMini" class="oculto"></div>
     </div>
@@ -226,6 +230,9 @@
     </div>
 
     <div class="passo oculto" data-painel="layout">
+      <div class="campo">Cor da Midori
+        <div class="segmentado" id="ajTema"><button data-c="verde">🟢 Verde</button><button data-c="vermelho">🔴 Vermelho</button><button data-c="roxo">🟣 Roxo</button><button data-c="azul">🔵 Azul</button></div>
+      </div>
       <div class="campo">Telas
         <div class="segmentado" id="ajLayout"><button data-l="flex">⊞ Flex-Grid</button><button data-l="grade">▦ Grade</button><button data-l="destaque">▣ Destaque</button></div>
         <span class="mut" style="font-size:12px"><b>Flex-Grid:</b> arruma as telas sozinho, todas no maior tamanho possível. <b>Grade:</b> o jeito antigo. <b>Destaque:</b> uma grande e as outras pequenas embaixo.</span>
@@ -274,19 +281,19 @@
 </div>
 
 <!-- Versão desta página. Sobe a cada atualização; quem estiver com uma mais antiga recebe o aviso. -->
-<script>const VERSAO = 25;</script>
-<script src="js/config.js?v=25"></script>
-<script src="js/diagnostico.js?v=25"></script>
-<script src="js/base.js?v=25"></script>
-<script src="js/entrada.js?v=25"></script>
-<script src="js/sala.js?v=25"></script>
-<script src="js/admin.js?v=25"></script>
-<script src="js/voz.js?v=25"></script>
-<script src="js/telas.js?v=25"></script>
-<script src="js/ajustes.js?v=25"></script>
-<script src="js/chat.js?v=25"></script>
-<script src="js/transmissao.js?v=25"></script>
-<script src="js/conexao.js?v=25"></script>
-<script src="js/inicio.js?v=25"></script>
+<script>const VERSAO = 26;</script>
+<script src="js/config.js?v=26"></script>
+<script src="js/diagnostico.js?v=26"></script>
+<script src="js/base.js?v=26"></script>
+<script src="js/entrada.js?v=26"></script>
+<script src="js/sala.js?v=26"></script>
+<script src="js/admin.js?v=26"></script>
+<script src="js/voz.js?v=26"></script>
+<script src="js/telas.js?v=26"></script>
+<script src="js/ajustes.js?v=26"></script>
+<script src="js/chat.js?v=26"></script>
+<script src="js/transmissao.js?v=26"></script>
+<script src="js/conexao.js?v=26"></script>
+<script src="js/inicio.js?v=26"></script>
 </body>
 </html>
