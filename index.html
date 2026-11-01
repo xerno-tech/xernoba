@@ -4,19 +4,28 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Midori Xernoba</title>
+<link rel="icon" type="image/png" sizes="32x32" href="img/favicon-32.png">
+<link rel="icon" type="image/png" sizes="64x64" href="img/favicon-64.png">
+<link rel="apple-touch-icon" href="img/apple-touch-icon.png">
+<meta name="theme-color" content="#2ECC71">
+<meta property="og:title" content="Midori Xernoba">
+<meta property="og:description" content="A sala da galera para transmitir jogo, assistir junto e conversar.">
+<meta property="og:image" content="https://xerno-tech.github.io/xernoba/img/og.png">
+<meta property="og:url" content="https://xerno-tech.github.io/xernoba/">
+<meta name="twitter:card" content="summary_large_image">
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
-<link rel="stylesheet" href="css/midori.css?v=24">
+<link rel="stylesheet" href="css/midori.css?v=25">
 </head>
 <body>
 <button id="olho" title="Mostrar/ocultar interface"></button>
 <div id="toasts"></div>
 <div id="lightbox" class="oculto"><img alt=""></div>
 <div id="previaHover" class="oculto"><img alt=""><span></span></div>
-<div id="faixaVersao" class="oculto">🍃 Tem uma versão nova da Midori. <button id="btnAtualizarVersao">Atualizar agora</button><button class="link" id="btnVersaoDepois" title="Depois">✕</button></div>
+<div id="faixaVersao" class="oculto"><img class="logoIcone" src="img/logo.png" alt=""> Tem uma versão nova da Midori. <button id="btnAtualizarVersao">Atualizar agora</button><button class="link" id="btnVersaoDepois" title="Depois">✕</button></div>
 
 <!-- ================= ENTRADA ================= -->
 <div id="portao" class="oculto">
-  <h1>🍃 Midori Xernoba</h1>
+  <h1><img class="logoIcone" src="img/logo.png" alt=""> Midori Xernoba</h1>
   <p>Espaço fechado do grupo, só para adultos.</p>
   <label class="marcar" style="color:var(--txt)"><input type="checkbox" id="chk18"> Tenho 18 anos ou mais</label>
   <button id="btnDiscord" class="oculto" disabled>Entrar com Discord</button>
@@ -25,7 +34,7 @@
 </div>
 
 <div id="entrada" class="oculto">
-  <h1>🍃 Midori Xernoba</h1>
+  <h1><img class="logoIcone" src="img/logo.png" alt=""> Midori Xernoba</h1>
   <p>Transmita seu jogo para os amigos, direto do navegador.</p>
   <label class="campo">Seu nome <input type="text" id="inNome" maxlength="24" placeholder="Ex.: Xernoba" autocomplete="nickname"></label>
   <label class="campo">Sala <input type="text" id="inSala" maxlength="32" placeholder="Ex.: galera-x7k2"></label>
@@ -36,7 +45,7 @@
 <!-- ================= SALA ================= -->
 <div id="sala" class="oculto">
   <div id="barra">
-    <span class="marca">🍃 Midori Xernoba</span>
+    <span class="marca"><img class="logoIcone" src="img/logo.png" alt=""> Midori Xernoba</span>
     <span class="salaNome"><span id="txtSala"></span><button class="link" id="btnLink" title="Copiar link da sala">🔗 Copiar link</button></span>
     <button class="link" id="btnAjustes" title="Ajustes">⚙️ Ajustes</button>
     <span class="esp"></span>
@@ -265,19 +274,19 @@
 </div>
 
 <!-- Versão desta página. Sobe a cada atualização; quem estiver com uma mais antiga recebe o aviso. -->
-<script>const VERSAO = 24;</script>
-<script src="js/config.js?v=24"></script>
-<script src="js/diagnostico.js?v=24"></script>
-<script src="js/base.js?v=24"></script>
-<script src="js/entrada.js?v=24"></script>
-<script src="js/sala.js?v=24"></script>
-<script src="js/admin.js?v=24"></script>
-<script src="js/voz.js?v=24"></script>
-<script src="js/telas.js?v=24"></script>
-<script src="js/ajustes.js?v=24"></script>
-<script src="js/chat.js?v=24"></script>
-<script src="js/transmissao.js?v=24"></script>
-<script src="js/conexao.js?v=24"></script>
-<script src="js/inicio.js?v=24"></script>
+<script>const VERSAO = 25;</script>
+<script src="js/config.js?v=25"></script>
+<script src="js/diagnostico.js?v=25"></script>
+<script src="js/base.js?v=25"></script>
+<script src="js/entrada.js?v=25"></script>
+<script src="js/sala.js?v=25"></script>
+<script src="js/admin.js?v=25"></script>
+<script src="js/voz.js?v=25"></script>
+<script src="js/telas.js?v=25"></script>
+<script src="js/ajustes.js?v=25"></script>
+<script src="js/chat.js?v=25"></script>
+<script src="js/transmissao.js?v=25"></script>
+<script src="js/conexao.js?v=25"></script>
+<script src="js/inicio.js?v=25"></script>
 </body>
 </html>

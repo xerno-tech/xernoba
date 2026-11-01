@@ -347,3 +347,7 @@ body.naSala #olho { display:flex; }
 .conectando { padding: 10px 14px; font-size: 13px; opacity: .75; line-height: 1.4; }
 .conectando.aviso { opacity: 1; color: #f5b74a; }
 #diagSaida { display:block; white-space:pre-wrap; word-break:break-word; user-select:text; max-height:340px; }
+
+/* logo */
+.logoIcone { width:1.35em; height:1.35em; vertical-align:-0.3em; object-fit:contain; margin-right:2px; }
+h1 .logoIcone { width:1.25em; height:1.25em; }
