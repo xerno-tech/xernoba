@@ -235,11 +235,35 @@ function ligarBuscaJogo(input, aoEscolher) {
     if (input.value.trim() !== jogoAtual) aoEscolher({ nome: input.value.trim(), capa: null });   // digitou e não escolheu: vale o texto
   }, 150));
 }
+// jogos que a pessoa já escolheu (neste navegador), para escolher de novo com um clique
+let jogosRecentes = []; try { jogosRecentes = JSON.parse(ler('jogosRecentes') || '[]').filter(j => j && j.nome).slice(0, 10); } catch (e) {}
+function lembrarJogo(j) {
+  if (!j || !j.nome) return;
+  const antigo = jogosRecentes.find(x => x.nome.toLowerCase() === j.nome.toLowerCase());
+  const capa = capaValida(j.capa) ? j.capa : (antigo && antigo.capa) || '';
+  jogosRecentes = [{ nome: j.nome, capa }, ...jogosRecentes.filter(x => x.nome.toLowerCase() !== j.nome.toLowerCase())].slice(0, 10);
+  salvar('jogosRecentes', JSON.stringify(jogosRecentes)); desenharRecentes();
+}
+function desenharRecentes() {
+  document.querySelectorAll('.recentesJogo').forEach(box => {
+    box.classList.toggle('oculto', !jogosRecentes.length);
+    box.innerHTML = jogosRecentes.length ? '<span class="rot">Já jogados:</span>' + jogosRecentes.map((j, i) => `<button type="button" class="chipJogo ${j.nome === jogoAtual ? 'sel' : ''}" data-i="${i}" title="${esc(j.nome)}">${capaValida(j.capa) ? `<img src="${esc(j.capa)}" alt="">` : '🎮'}<span>${esc(j.nome)}</span><i data-tirar="${i}" title="Tirar da lista">✕</i></button>`).join('') : '';
+    box.querySelectorAll('.chipJogo').forEach(b => b.onclick = e => {
+      const tirar = e.target.dataset.tirar;
+      if (tirar !== undefined) { jogosRecentes.splice(Number(tirar), 1); salvar('jogosRecentes', JSON.stringify(jogosRecentes)); desenharRecentes(); return; }
+      definirJogo(jogosRecentes[Number(b.dataset.i)]);
+      if (box.closest('#popJogo')) $('popJogo').classList.add('oculto');
+    });
+  });
+}
 function definirJogo(j) {
   jogoAtual = String((j && j.nome) || '').trim().slice(0, 60);
   jogoCapa = j && capaValida(j.capa) ? j.capa : '';
+  if (jogoAtual) { if (!jogoCapa) { const r = jogosRecentes.find(x => x.nome.toLowerCase() === jogoAtual.toLowerCase()); if (r && capaValida(r.capa)) jogoCapa = r.capa; } lembrarJogo({ nome: jogoAtual, capa: jogoCapa }); }
+  esconderAvisoJogo();
   salvar('jogo', jogoAtual); salvar('jogoCapa', jogoCapa);
   $('inJogo').value = jogoAtual; $('inJogo2').value = jogoAtual; mostrarJogo();
+desenharRecentes();
   if (aoVivo) enviarEstado();
 }
 function mostrarJogo() {
@@ -259,3 +283,18 @@ $('btnJogo').onclick = e => {
 };
 document.addEventListener('pointerdown', e => { const p = $('popJogo'); if (!p.classList.contains('oculto') && !p.contains(e.target) && !$('btnJogo').contains(e.target)) p.classList.add('oculto'); });
 mostrarJogo();
+desenharRecentes();
+
+// aviso pequeno para quem acabou de começar a transmitir
+let tAvisoJogo = null;
+function avisoAoVivo() {
+  const b = $('avisoJogo');
+  b.innerHTML = jogoAtual
+    ? `🎮 Transmitindo <b>${esc(jogoAtual)}</b>. <button class="link" id="avisoTrocar">Trocar</button>`
+    : `🎮 Diga o que você está jogando: aparece para a galera e conta nas estatísticas. <button class="link" id="avisoTrocar">Escolher</button>`;
+  b.classList.remove('oculto'); b.classList.toggle('pedindo', !jogoAtual);
+  $('avisoTrocar').onclick = e => { e.stopPropagation(); esconderAvisoJogo(); $('btnJogo').click(); };
+  clearTimeout(tAvisoJogo); tAvisoJogo = setTimeout(esconderAvisoJogo, jogoAtual ? 6000 : 15000);
+}
+function esconderAvisoJogo() { clearTimeout(tAvisoJogo); const b = $('avisoJogo'); if (b) b.classList.add('oculto'); }
+

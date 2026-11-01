@@ -155,6 +155,7 @@ function enviarPara(id) {
   if (pc) pc.addEventListener('connectionstatechange', () => { if (pc.connectionState === 'connected') aplicarBitrate(call); });
 }
 function atualizarAoVivo() {
+  document.body.classList.toggle('aoVivoAgora', aoVivo);
   $('aoVivoBox').classList.toggle('oculto', !aoVivo);
   $('btnTransmitir').classList.toggle('oculto', aoVivo);
   const n = assistentes.size;
@@ -241,6 +242,7 @@ async function iniciarTransmissao() {
     s.getAudioTracks().forEach(t => { t.contentHint = 'music'; t.onended = atualizarSom; });
     if (stream) { stream.getVideoTracks().forEach(t => t.onended = null); stream.getTracks().forEach(t => { t.onended = null; t.stop(); }); }
     pararExtras();
+    const comecando = !aoVivo;
     if (!aoVivo) inicioLive = Date.now();
     stream = s; aoVivo = true;
     semSomOk = fonte === 'console' && selAudio.value === 'nenhum';
@@ -250,6 +252,7 @@ async function iniciarTransmissao() {
     for (const id of assistentes.keys()) enviarPara(id);
     atualizarAoVivo();
     enviarEstado();
+    if (comecando) setTimeout(avisoAoVivo, 600);
     if (!faltaSom) toast('Você está <b>ao vivo</b>. Seus amigos já podem clicar em Assistir.');
     setTimeout(enviarMiniatura, 2500);
     setTimeout(mostrarSaida, 1200);
@@ -261,7 +264,7 @@ async function iniciarTransmissao() {
 function pararTransmissao() {
   if (stream) { stream.getVideoTracks().forEach(t => t.onended = null); stream.getTracks().forEach(t => { t.onended = null; t.stop(); }); }
   pararExtras();
-  stream = null; aoVivo = false;
+  stream = null; aoVivo = false; esconderAvisoJogo();
   for (const a of assistentes.values()) if (a.call) try { a.call.close(); } catch (e) {}
   if (telaLocal) {
     telaSaiu(telaLocal);
