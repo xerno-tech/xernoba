@@ -48,6 +48,13 @@ export default {
       } catch (e) { return Response.json({ iceServers: [], erro: true }, { headers: cors }); }
     }
 
+    // teste da busca de jogos (sem login): diz só de onde veio, quantos achou e o erro, se houver
+    if (url.pathname === '/jogos/teste') {
+      const q = String(url.searchParams.get('q') || 'silent hill').slice(0, 60);
+      const { jogos, erro, fontes } = await buscarJogosTodos(q, env);
+      return Response.json({ q, igdbConfigurado: !!(env.IGDB_CLIENT_ID && env.IGDB_CLIENT_SECRET), fontes, achados: jogos.length, primeiros: jogos.slice(0, 3).map(j => j.nome), erro });
+    }
+
     // busca de jogos (para "O que você vai jogar?"): IGDB se tiver as chaves da Twitch, senão a loja da Steam
     if (url.pathname === '/jogos' && req.method === 'POST') {
       let corpo = {}; try { corpo = await req.json(); } catch (e) {}
@@ -58,8 +65,9 @@ export default {
       const guardado = await caches.default.match(chaveCache);
       if (guardado) return new Response(guardado.body, { headers: { ...cors, 'content-type': 'application/json' } });
       let jogos = [];
-      try { jogos = env.IGDB_CLIENT_ID && env.IGDB_CLIENT_SECRET ? await buscarIgdb(q, env) : await buscarSteam(q); } catch (e) {}
-      const resp = JSON.stringify({ ok: true, jogos, fonte: env.IGDB_CLIENT_ID ? 'igdb' : 'steam' });
+      let erro = null;
+      ({ jogos, erro } = await buscarJogosTodos(q, env));
+      const resp = JSON.stringify({ ok: true, jogos, fonte: env.IGDB_CLIENT_ID ? 'igdb' : 'steam', erro });
       if (jogos.length) await caches.default.put(chaveCache, new Response(resp, { headers: { 'content-type': 'application/json', 'cache-control': 'max-age=86400' } }));
       return new Response(resp, { headers: { ...cors, 'content-type': 'application/json' } });
     }
@@ -403,26 +411,40 @@ async function buscarSteam(q) {
   const j = await r.json();
   return (j.items || []).filter(x => x.type === 'app').slice(0, 8).map(x => ({ nome: x.name, capa: x.tiny_image || null, info: 'PC' }));
 }
-async function tokenTwitch(env) {
-  const chave = new Request('https://jogos.midori/token-twitch');
-  const c = await caches.default.match(chave);
-  if (c) return (await c.json()).t;
-  const r = await fetch(`https://id.twitch.tv/oauth2/token?client_id=${env.IGDB_CLIENT_ID}&client_secret=${env.IGDB_CLIENT_SECRET}&grant_type=client_credentials`, { method: 'POST' });
+let tokenIgdb = null, tokenIgdbAte = 0;
+async function tokenTwitch(env, renovar) {
+  if (!renovar && tokenIgdb && Date.now() < tokenIgdbAte) return tokenIgdb;
+  const r = await fetch(`https://id.twitch.tv/oauth2/token?client_id=${encodeURIComponent(env.IGDB_CLIENT_ID.trim())}&client_secret=${encodeURIComponent(env.IGDB_CLIENT_SECRET.trim())}&grant_type=client_credentials`, { method: 'POST' });
   const j = await r.json();
-  if (!j.access_token) throw new Error('twitch');
-  await caches.default.put(chave, new Response(JSON.stringify({ t: j.access_token }), { headers: { 'cache-control': `max-age=${Math.max(60, (j.expires_in || 3600) - 3600)}` } }));
-  return j.access_token;
+  if (!j.access_token) throw new Error('Twitch recusou as chaves: ' + (j.message || r.status));
+  tokenIgdb = j.access_token; tokenIgdbAte = Date.now() + Math.max(60, (j.expires_in || 3600) - 3600) * 1000;
+  return tokenIgdb;
+}
+// IGDB primeiro (tem console); se falhar ou achar pouco, completa com a Steam
+async function buscarJogosTodos(q, env) {
+  let jogos = [], erro = null; const fontes = [];
+  if (env.IGDB_CLIENT_ID && env.IGDB_CLIENT_SECRET) {
+    try { jogos = await buscarIgdb(q, env); fontes.push('igdb:' + jogos.length); } catch (e) { erro = String(e.message || e).slice(0, 200); fontes.push('igdb:erro'); }
+  }
+  if (jogos.length < 3) {
+    try {
+      const st = await buscarSteam(q); fontes.push('steam:' + st.length);
+      for (const j of st) if (!jogos.some(x => x.nome.toLowerCase() === j.nome.toLowerCase())) jogos.push(j);
+    } catch (e) { fontes.push('steam:erro'); if (!erro) erro = 'Steam: ' + String(e.message || e).slice(0, 120); }
+  }
+  return { jogos: jogos.slice(0, 10), erro, fontes };
 }
 async function buscarIgdb(q, env) {
   const busca = q.replace(/["\\]/g, ' ');
   const r = await fetch('https://api.igdb.com/v4/games', {
     method: 'POST', signal: AbortSignal.timeout(5000),
-    headers: { 'Client-ID': env.IGDB_CLIENT_ID, Authorization: 'Bearer ' + await tokenTwitch(env), 'content-type': 'text/plain' },
+    headers: { 'Client-ID': env.IGDB_CLIENT_ID.trim(), Accept: 'application/json', Authorization: 'Bearer ' + await tokenTwitch(env), 'content-type': 'text/plain' },
     body: `search "${busca}"; fields name, first_release_date, cover.image_id, platforms.abbreviation, version_parent; where version_parent = null; limit 10;`,
   });
+  if (r.status === 401 && !buscarIgdb._renovou) { buscarIgdb._renovou = true; await tokenTwitch(env, true); try { return await buscarIgdb(q, env); } finally { buscarIgdb._renovou = false; } }
   const j = await r.json();
-  if (!Array.isArray(j)) return [];
-  return j.slice(0, 8).map(g => ({
+  if (!Array.isArray(j)) throw new Error('IGDB respondeu: ' + JSON.stringify(j).slice(0, 160));
+  return j.slice(0, 10).map(g => ({
     nome: g.name,
     capa: g.cover && g.cover.image_id ? `https://images.igdb.com/igdb/image/upload/t_cover_small/${g.cover.image_id}.jpg` : null,
     info: [g.first_release_date ? new Date(g.first_release_date * 1000).getUTCFullYear() : null, (g.platforms || []).map(p => p.abbreviation).filter(Boolean).slice(0, 4).join(', ')].filter(Boolean).join(' · '),

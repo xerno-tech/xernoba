@@ -193,7 +193,7 @@ const buscasJogo = new Map();
 function buscarJogos(q) {
   const k = q.toLowerCase();
   if (!buscasJogo.has(k)) buscasJogo.set(k, fetch(LOGIN_URL + '/jogos', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: tokenLogin, q }) })
-    .then(r => r.json()).then(r => (r && r.jogos) || []).catch(() => { buscasJogo.delete(k); return []; }));
+    .then(r => r.json()).then(r => { const j = (r && r.jogos) || []; if (!j.length) buscasJogo.delete(k); return j; }).catch(() => { buscasJogo.delete(k); return []; }));
   return buscasJogo.get(k);
 }
 function ligarBuscaJogo(input, aoEscolher) {
