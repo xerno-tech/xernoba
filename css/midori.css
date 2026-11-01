@@ -342,3 +342,7 @@ body.naSala #olho { display:flex; }
 .registroConexao { background:var(--panel2); border:1px solid var(--linha); border-radius:9px; padding:8px 10px; max-height:260px; overflow:auto;
   font-size:12.5px; display:flex; flex-direction:column; gap:4px; font-variant-numeric:tabular-nums; }
 .painelInfo b.alerta { color:var(--aviso); font-weight:600; }
+
+/* lista enquanto liga ao servidor */
+.conectando { padding: 10px 14px; font-size: 13px; opacity: .75; line-height: 1.4; }
+.conectando.aviso { opacity: 1; color: #f5b74a; }

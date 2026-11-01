@@ -10,9 +10,36 @@ function entrar(n, s) {
   iniciarConexao();
 }
 
+// o servidor grátis do PeerJS às vezes demora minutos para responder, sem dar erro:
+// se não responder em 15 s, desiste dessa tentativa e tenta de novo
+let tentativaServidor = 0, tServidor = null, inicioTentativa = 0, saidaLigada = false;
+function mostrarConectando(texto, aviso) {
+  const el = $('lista'); if (!el || euId || membros.length) return;
+  el.innerHTML = `<div class="conectando${aviso ? ' aviso' : ''}">${texto}</div>`;
+}
 function iniciarConexao() {
+  tentativaServidor++; inicioTentativa = Date.now();
+  if (tentativaServidor > 1) anotarConexao(`🔄 Tentando de novo ligar ao servidor do PeerJS (tentativa ${tentativaServidor})`);
+  mostrarConectando(tentativaServidor > 3
+    ? '⚠️ O servidor do PeerJS não está respondendo. A Midori continua tentando sozinha; pode deixar a aba aberta.'
+    : tentativaServidor > 1 ? `Conectando ao servidor… (tentativa ${tentativaServidor})` : 'Conectando ao servidor…', tentativaServidor > 3);
   peer = new Peer();
-  peer.on('open', id => { euId = id; virarHub(); setTimeout(() => { if (!hubConn) conectarHub(); }, 800); });
+  clearTimeout(tServidor);
+  const estePeer = peer;
+  tServidor = setTimeout(() => {
+    if (peer !== estePeer || euId || saindo) return;
+    anotarConexao('⏳ O servidor do PeerJS não respondeu em 15 s');
+    try { estePeer.destroy(); } catch (e) {}
+    iniciarConexao();
+  }, 15000);
+  peer.on('open', id => {
+    if (peer !== estePeer) { try { estePeer.destroy(); } catch (e) {} return; }
+    clearTimeout(tServidor);
+    mostrarConectando('Entrando na sala…');
+    const seg = ((Date.now() - inicioTentativa) / 1000).toFixed(1);
+    anotarConexao(`🟢 Ligado ao servidor do PeerJS em ${seg} s` + (tentativaServidor > 1 ? ` (tentativa ${tentativaServidor})` : ''));
+    euId = id; virarHub(); setTimeout(() => { if (!hubConn) conectarHub(); }, 800);
+  });
 
   // alguém quer me assistir
   const naSala = id => membros.some(m => m.id === id);   // lista que o organizador da sala já conferiu
@@ -60,6 +87,7 @@ function iniciarConexao() {
   });
 
   peer.on('error', e => {
+    if (peer !== estePeer) return;   // tentativa antiga, já descartada
     if (e.type === 'peer-unavailable') {
       if (String(e.message).includes(HUB)) { if (hubConn && !hubConn.open) hubConn = null; agendarHub(); }
       else for (const id of [...assistindo.keys()]) if (String(e.message).includes(id)) pararDeAssistir(id);
@@ -68,6 +96,7 @@ function iniciarConexao() {
     }
     if (e.type !== 'peer-unavailable') anotarConexao(`❗ Erro de conexão: ${e.type}`);
   });
-  peer.on('disconnected', () => { anotarConexao('📡 Você caiu do servidor do PeerJS (as telas e a voz continuam); reconectando'); setTimeout(() => { try { peer.reconnect(); } catch (e) {} }, 2000); });
+  peer.on('disconnected', () => { if (peer !== estePeer || estePeer.destroyed) return; anotarConexao('📡 Você caiu do servidor do PeerJS (as telas e a voz continuam); reconectando'); setTimeout(() => { try { peer.reconnect(); } catch (e) {} }, 2000); });
+  if (saidaLigada) return; saidaLigada = true;
   window.addEventListener('beforeunload', () => { if (avisoDoHub) avisoDoHub(`${nome} saiu da sala`, null, null, 'saiu', euId); saindo = true; try { hubConn && hubConn.open && hubConn.send({ tipo: 'tchau' }); } catch (e) {} try { peer.destroy(); } catch (e) {} try { hubPeer && hubPeer.destroy(); } catch (e) {} });
 }
