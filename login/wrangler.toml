@@ -3,8 +3,13 @@ name = "midori-login"
 main = "worker.js"
 compatibility_date = "2025-09-01"
 workers_dev = true
-# mantém as variáveis que já estão no painel do Cloudflare (SITE_URL, IDs do Discord)
+# segredos (Client Secret do Discord, chaves do IGDB/TURN) ficam só no painel do Cloudflare
 keep_vars = true
+
+[vars]
+SITE_URL = "https://xerno-tech.github.io/xernoba/"
+DISCORD_CLIENT_ID = "1563384635604467742"
+DISCORD_GUILD_ID = "1132352204930547807"
 
 [[durable_objects.bindings]]
 name = "SINAL"
