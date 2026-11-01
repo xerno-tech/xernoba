@@ -200,7 +200,8 @@ function ligarBuscaJogo(input, aoEscolher) {
   const caixa = input.parentElement.querySelector('.sugestoes');
   let itens = [], sel = -1, tm = null, vez = 0;
   const fechar = () => { caixa.classList.add('oculto'); sel = -1; };
-  const escolher = j => { input.value = j.nome; fechar(); aoEscolher(j); };
+  let escolhido = input.value.trim();
+  const escolher = j => { input.value = j.nome; escolhido = j.nome; fechar(); aoEscolher(j); };
   const desenhar = () => {
     if (!itens.length) { fechar(); return; }
     caixa.innerHTML = itens.map((j, i) => `<button type="button" class="sug ${i === sel ? 'sel' : ''}" data-i="${i}">${capaValida(j.capa) ? `<img src="${esc(j.capa)}" alt="">` : '<span class="semCapa">🎮</span>'}<span class="t"><b>${esc(j.nome)}</b>${j.info ? `<span>${esc(j.info)}</span>` : ''}</span></button>`).join('');
@@ -227,12 +228,25 @@ function ligarBuscaJogo(input, aoEscolher) {
   input.addEventListener('keydown', e => {
     if (e.key === 'ArrowDown' && itens.length) { e.preventDefault(); sel = (sel + 1) % itens.length; desenhar(); }
     else if (e.key === 'ArrowUp' && itens.length) { e.preventDefault(); sel = (sel - 1 + itens.length) % itens.length; desenhar(); }
-    else if (e.key === 'Enter') { e.preventDefault(); if (sel >= 0 && itens[sel]) escolher(itens[sel]); else { fechar(); aoEscolher({ nome: input.value.trim(), capa: null }); } }
+    else if (e.key === 'Enter') {
+      e.preventDefault();
+      const txt = input.value.trim();
+      if (sel >= 0 && itens[sel]) return escolher(itens[sel]);
+      if (!txt) { fechar(); escolhido = ''; return aoEscolher({ nome: '', capa: null }); }   // campo vazio tira o jogo
+      const igual = itens.find(j => limpar(j.nome) === limpar(txt));
+      if (igual) return escolher(igual);
+      // só vale jogo que existe no banco: pede para escolher da lista
+      if (itens.length) { desenhar(); caixa.insertAdjacentHTML('afterbegin', '<span class="procurando">Escolha um jogo da lista 👇</span>'); }
+      else { caixa.innerHTML = '<span class="procurando">Nenhum jogo com esse nome. Tente escrever de outro jeito.</span>'; caixa.classList.remove('oculto'); }
+    }
     else if (e.key === 'Escape') { fechar(); }
   });
+  // digitou e saiu sem escolher: volta para o que estava (texto solto não vale)
+  input.addEventListener('focus', () => { escolhido = input.value.trim(); });
   input.addEventListener('blur', () => setTimeout(() => {
     fechar();
-    if (input.value.trim() !== jogoAtual) aoEscolher({ nome: input.value.trim(), capa: null });   // digitou e não escolheu: vale o texto
+    if (!input.value.trim() && escolhido) { escolhido = ''; aoEscolher({ nome: '', capa: null }); return; }
+    input.value = escolhido;
   }, 150));
 }
 // jogos que a pessoa já escolheu (neste navegador), para escolher de novo com um clique

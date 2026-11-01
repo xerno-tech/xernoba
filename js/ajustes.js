@@ -232,3 +232,8 @@ $('ajSonsGalera').onchange = () => { tocarSonsGalera = $('ajSonsGalera').checked
 // fecha os Ajustes com Esc ou clicando fora da janela
 addEventListener('keydown', e => { if (e.key === 'Escape' && !$('ajustes').classList.contains('oculto')) $('ajustes').classList.add('oculto'); });
 $('ajustes').addEventListener('pointerdown', e => { if (e.target === $('ajustes')) $('ajustes').classList.add('oculto'); });
+
+// mostra o ID do Discord (para virar admin fixo)
+(() => { const d = typeof dadosLogin === 'function' && dadosLogin(); if (!d || !d.id) return;
+  $('admMeuId').style.display = ''; $('admIdTxt').textContent = d.id;
+  $('admCopiarId').onclick = () => navigator.clipboard.writeText(d.id).then(() => toast('ID copiado.'), () => {}); })();

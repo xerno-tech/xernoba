@@ -8,3 +8,6 @@ const ADMIN_HASH = '954289a0bbd96ecbc2216116416613cd1a9f0ed7e205897d0b50cf4305a0
 
 // servidor de conexão (onde as pessoas se acham). Fica no mesmo Worker do login.
 const OPCOES_PEER = { host: 'midori-login.douglasfonsec2021.workers.dev', port: 443, secure: true, path: '/' };
+
+// contas do Discord (ID numérico) que são sempre admin, sem precisar de senha
+const ADMINS_DISCORD = [];

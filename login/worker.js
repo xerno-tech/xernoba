@@ -48,11 +48,19 @@ export default {
       } catch (e) { return Response.json({ iceServers: [], erro: true }, { headers: cors }); }
     }
 
+    // confere se um nome de jogo existe de verdade no banco (o organizador da sala pergunta antes de aceitar)
+    if (url.pathname === '/jogos/existe' && req.method === 'POST') {
+      let corpo = {}; try { corpo = await req.json(); } catch (e) {}
+      if (!(await conferir(String(corpo.token || ''), env.DISCORD_CLIENT_SECRET))) return Response.json({ ok: false }, { headers: cors });
+      const nome = String(corpo.nome || '').trim().slice(0, 60);
+      return Response.json({ ok: true, existe: await jogoExiste(nome, env) }, { headers: cors });
+    }
+
     // teste da busca de jogos (sem login): diz só de onde veio, quantos achou e o erro, se houver
     if (url.pathname === '/jogos/teste') {
       const q = String(url.searchParams.get('q') || 'silent hill').slice(0, 60);
       const { jogos, erro, fontes } = await buscarJogosTodos(q, env);
-      return Response.json({ q, igdbConfigurado: !!(env.IGDB_CLIENT_ID && env.IGDB_CLIENT_SECRET), fontes, achados: jogos.length, primeiros: jogos.slice(0, 3).map(j => j.nome), erro });
+      return Response.json({ q, igdbConfigurado: !!(env.IGDB_CLIENT_ID && env.IGDB_CLIENT_SECRET), fontes, achados: jogos.length, primeiros: jogos.slice(0, 6).map(j => j.nome + (j.info ? ' (' + j.info + ')' : '')), erro });
     }
 
     // busca de jogos (para "O que você vai jogar?"): IGDB se tiver as chaves da Twitch, senão a loja da Steam
@@ -434,24 +442,53 @@ async function buscarJogosTodos(q, env) {
   }
   return { jogos: jogos.slice(0, 20), erro, fontes };
 }
-async function buscarIgdb(q, env) {
-  const busca = q.replace(/["\\]/g, ' ');
+async function consultaIgdb(corpo, env) {
   const r = await fetch('https://api.igdb.com/v4/games', {
     method: 'POST', signal: AbortSignal.timeout(5000),
     headers: { 'Client-ID': env.IGDB_CLIENT_ID.trim(), Accept: 'application/json', Authorization: 'Bearer ' + await tokenTwitch(env), 'content-type': 'text/plain' },
-    body: `search "${busca}"; fields name, first_release_date, cover.image_id, platforms.abbreviation, version_parent; where version_parent = null; limit 40;`,
+    body: corpo,
   });
-  if (r.status === 401 && !buscarIgdb._renovou) { buscarIgdb._renovou = true; await tokenTwitch(env, true); try { return await buscarIgdb(q, env); } finally { buscarIgdb._renovou = false; } }
+  if (r.status === 401) { await tokenTwitch(env, true); throw new Error('token renovado'); }
   const j = await r.json();
   if (!Array.isArray(j)) throw new Error('IGDB respondeu: ' + JSON.stringify(j).slice(0, 160));
-  // o IGDB ordena por relevância do jeito dele: aqui o nome exato vem primeiro, depois os que começam com o que foi digitado
+  return j;
+}
+async function buscarIgdb(q, env, tentou) {
+  const busca = q.replace(/["\\]/g, ' ').trim();
+  const campos = 'fields id, name, first_release_date, cover.image_id, platforms.abbreviation;';
+  let porBusca, exatos;
+  try {
+    // duas perguntas juntas: a busca normal do IGDB (que às vezes esconde o jogo original de uma série)
+    // e o nome exato, do mais antigo para o mais novo
+    [porBusca, exatos] = await Promise.all([
+      consultaIgdb(`search "${busca}"; ${campos} where version_parent = null; limit 40;`, env),
+      consultaIgdb(`${campos} where name ~ "${busca}" & version_parent = null; sort first_release_date asc; limit 10;`, env).catch(() => []),
+    ]);
+  } catch (e) {
+    if (!tentou && String(e.message) === 'token renovado') return buscarIgdb(q, env, true);
+    throw e;
+  }
   const alvo = q.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
   const norm = n => String(n || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-  const nota = g => { const n = norm(g.name); return n === alvo ? 0 : n.startsWith(alvo + ' ') || n.startsWith(alvo) ? 1 : n.includes(alvo) ? 2 : 3; };
-  const ordenados = j.map((g, i) => ({ g, i, n: nota(g) })).sort((a, b) => a.n - b.n || a.i - b.i).map(x => x.g);
-  return ordenados.slice(0, 20).map(g => ({
+  const nota = g => { const n = norm(g.name); return n === alvo ? 0 : n.startsWith(alvo) ? 1 : n.includes(alvo) ? 2 : 3; };
+  const vistos = new Set(), lista = [];
+  for (const g of exatos) if (!vistos.has(g.id)) { vistos.add(g.id); lista.push(g); }
+  const resto = porBusca.filter(g => !vistos.has(g.id)).map((g, i) => ({ g, i, n: nota(g) })).sort((a, b) => a.n - b.n || a.i - b.i).map(x => x.g);
+  return [...lista, ...resto].slice(0, 20).map(g => ({
     nome: g.name,
     capa: g.cover && g.cover.image_id ? `https://images.igdb.com/igdb/image/upload/t_cover_small/${g.cover.image_id}.jpg` : null,
     info: [g.first_release_date ? new Date(g.first_release_date * 1000).getUTCFullYear() : null, (g.platforms || []).map(p => p.abbreviation).filter(Boolean).slice(0, 4).join(', ')].filter(Boolean).join(' · '),
   }));
+}
+
+// guarda na memória as respostas de "esse jogo existe?" para não perguntar de novo
+const jogosConferidos = new Map();
+const normJogo = n => String(n || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+async function jogoExiste(nome, env) {
+  const k = normJogo(nome); if (!k) return false;
+  if (jogosConferidos.has(k)) return jogosConferidos.get(k);
+  const { jogos, erro } = await buscarJogosTodos(nome, env);
+  const existe = jogos.some(j => normJogo(j.nome) === k);
+  if (!erro || existe) { jogosConferidos.set(k, existe); if (jogosConferidos.size > 2000) jogosConferidos.clear(); }
+  return existe;
 }

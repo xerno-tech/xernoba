@@ -99,10 +99,30 @@ function virarHub() {
     guardarNoHistorico(msg);
   };
   const difundir = () => {
-    const lista = [...roster.values()].map(({ cid: _c, _expulso, _did, _pedidos, _ultimaFig, ...m }) => m);
+    const lista = [...roster.values()].map(({ cid: _c, _expulso, _did, _pedidos, _ultimaFig, _jogoPedido, ...m }) => m);
     const regras = { banidos: [...banidos], nomesBanidos, silenciados: [...silenciados], senhaHash, autorizados: [...autorizados], adminsAvisados: [...adminsAvisados] };
     for (const c of conns.values()) if (c.open) try { c.send({ tipo: 'lista', membros: lista, regras }); } catch (e) {}
   };
+  // só aparece jogo que existe no banco de jogos (nada de nome inventado)
+  const jogosOk = new Map();   // nome normalizado -> true/false/promessa
+  function jogoConferido(jogo, quem, token) {
+    jogo = jogo.trim(); if (!jogo) return '';
+    if (!LOGIN_URL) return jogo;
+    const k = limpar(jogo); const v = jogosOk.get(k);
+    if (v === true) return jogo;
+    if (v === false) return '';
+    if (!v) {
+      jogosOk.set(k, fetch(LOGIN_URL + '/jogos/existe', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: tokenLogin || token, nome: jogo }) })
+        .then(r => r.json()).then(r => {
+          const ok = !!(r && r.ok && r.existe); jogosOk.set(k, ok);
+          const m = roster.get(quem);
+          if (ok && m && m.live && m._jogoPedido === jogo) { m.jogo = jogo; difundir(); }
+          if (!ok) { const cq = conns.get(quem); try { cq && cq.open && cq.send({ tipo: 'jogoRecusado', jogo }); } catch (e) {} }
+        }).catch(() => jogosOk.delete(k)));
+    }
+    const m = roster.get(quem); if (m) m._jogoPedido = jogo;
+    return m && m.jogo === jogo ? jogo : '';   // enquanto confere, continua o que já estava valendo
+  }
   let hubAbriu = false;
   hubPeer.on('open', () => {
     avisoDoHub = registrar;
@@ -150,10 +170,10 @@ function virarHub() {
             autorizados.add(ccid);
           }
         }
-        const admin = !!(ADMIN_HASH && d.adminKey && await sha256(String(d.adminKey)) === ADMIN_HASH);
+        const admin = !!(disc && disc.id && ADMINS_DISCORD.includes(String(disc.id))) || !!(ADMIN_HASH && d.adminKey && await sha256(String(d.adminKey)) === ADMIN_HASH);
         const m = { id: c.peer, cid: ccid, nome: String(d.nome).slice(0, 24), live: !!d.live, voz: !!d.voz, mudo: !!d.mudo || silenciados.has(ccid),
                     ausente: !!d.ausente && !d.live, versao: Number(d.versao) || 0,
-                    jogo: d.live && d.jogo ? String(d.jogo).slice(0, 60) : '', jogoCapa: d.live && capaValida(d.jogoCapa) ? d.jogoCapa : null, _did: disc && disc.id ? String(disc.id) : (antes && antes._did) || null,
+                    jogo: d.live ? jogoConferido(String(d.jogo || '').slice(0, 60), c.peer, d.token) : '', jogoCapa: d.live && capaValida(d.jogoCapa) ? d.jogoCapa : null, _did: disc && disc.id ? String(disc.id) : (antes && antes._did) || null,
                     vendo: Array.isArray(d.vendo) ? d.vendo.slice(0, 8).map(x => String(x).slice(0, 64)) : [],
                     liveMs: d.live ? Math.max(0, Math.min(Number(d.liveMs) || 0, 7 * 864e5)) : 0,
                     silenciado: silenciados.has(ccid), admin,
@@ -238,6 +258,11 @@ function virarHub() {
           if (!alvo.live) return;
           const jogo = String(d.jogo || '').trim().slice(0, 60);
           const capa = capaValida(d.capa) ? d.capa : '';
+          if (jogo && LOGIN_URL && jogosOk.get(limpar(jogo)) !== true) {
+            const r = await fetch(LOGIN_URL + '/jogos/existe', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: tokenLogin, nome: jogo }) }).then(x => x.json()).catch(() => null);
+            if (!r || !r.existe) { try { c.send({ tipo: 'jogoRecusado', jogo }); } catch (e) {} return; }
+            jogosOk.set(limpar(jogo), true);
+          }
           registrar(jogo ? `${adm.nome} mudou o jogo de ${alvo.nome} para ${jogo} 🎮` : `${adm.nome} tirou o jogo de ${alvo.nome}`, null, null, 'nome', alvo.id);
           try { ca && ca.send({ tipo: 'jogoPeloAdmin', jogo, capa, por: adm.nome }); } catch (e) {}
         }
@@ -331,6 +356,7 @@ function conectarHub() {
     else if (d.tipo === 'semLogin') { bloqueado = true; salvar('token', ''); salvar('erroLogin', 'sessao'); location.href = location.pathname; }
     else if (d.tipo === 'pedeSenha') { bloquear('senha', d.errada); }
     else if (d.tipo === 'silenciar') { aplicarSilencio(!!d.valor); }
+    else if (d.tipo === 'jogoRecusado') { toast(`🎮 <b>${esc(d.jogo)}</b> não está no banco de jogos. Escolha um jogo da lista.`, 'aviso', 6000); if (jogoAtual === d.jogo) definirJogo({ nome: '', capa: null }); }
     else if (d.tipo === 'jogoPeloAdmin') { if (aoVivo) { definirJogo({ nome: d.jogo, capa: d.capa }); toast(`🛡️ ${esc(d.por)} mudou o seu jogo para <b>${esc(d.jogo || 'nenhum')}</b>.`, '', 6000); } }
     else if (d.tipo === 'parar') { if (aoVivo) { pararTransmissao(); toast('Um admin encerrou a sua transmissão.', 'aviso', 8000); } }
     else if (d.tipo === 'msg') addMsg(d);
