@@ -212,7 +212,17 @@ function ligarBuscaJogo(input, aoEscolher) {
     const q = input.value.trim();
     if (q.length < 2 || !temServidorDados()) { itens = []; fechar(); return; }
     const minha = ++vez;
-    tm = setTimeout(async () => { const r = await buscarJogos(q); if (minha !== vez) return; itens = r; sel = -1; desenhar(); }, 280);
+    // mostra na hora que está procurando, sem apagar a lista anterior (nada pisca nem pula)
+    if (!itens.length) { caixa.innerHTML = '<span class="procurando">Procurando…</span>'; caixa.classList.remove('oculto'); }
+    else caixa.classList.add('carregando');
+    tm = setTimeout(async () => {
+      const r = await buscarJogos(q);
+      if (minha !== vez) return;
+      caixa.classList.remove('carregando');
+      itens = r; sel = -1;
+      if (!r.length) { caixa.innerHTML = '<span class="procurando">Nenhum jogo encontrado. Enter usa o que você digitou.</span>'; caixa.classList.remove('oculto'); return; }
+      desenhar();
+    }, 180);
   });
   input.addEventListener('keydown', e => {
     if (e.key === 'ArrowDown' && itens.length) { e.preventDefault(); sel = (sel + 1) % itens.length; desenhar(); }
@@ -239,6 +249,7 @@ function mostrarJogo() {
 }
 $('inJogo').value = jogoAtual;
 ligarBuscaJogo($('inJogo'), definirJogo);
+setTimeout(() => { if (temServidorDados()) buscarJogos('zelda'); }, 4000);
 ligarBuscaJogo($('inJogo2'), j => { definirJogo(j); $('popJogo').classList.add('oculto'); });
 // dá para trocar o jogo durante a transmissão, sem parar
 $('btnJogo').onclick = e => {
