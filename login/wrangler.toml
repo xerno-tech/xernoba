@@ -1,0 +1,15 @@
+# Publicação do servidor da Midori no Cloudflare (feita pelo GitHub Actions)
+name = "midori-login"
+main = "worker.js"
+compatibility_date = "2025-09-01"
+workers_dev = true
+# mantém as variáveis que já estão no painel do Cloudflare (SITE_URL, IDs do Discord)
+keep_vars = true
+
+[[durable_objects.bindings]]
+name = "SINAL"
+class_name = "Sinal"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Sinal"]

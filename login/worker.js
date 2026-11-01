@@ -9,6 +9,13 @@
 //   DISCORD_CLIENT_ID     (texto)   Client ID do app no Discord
 //   DISCORD_GUILD_ID      (texto)   ID do servidor do Discord (vários: separe por vírgula)
 //   DISCORD_CLIENT_SECRET (secret)  Client Secret do app no Discord — nunca vai para o GitHub
+//
+// Também é o servidor de conexão da Midori (no lugar do servidor grátis do PeerJS):
+// cada pessoa abre uma ligação contínua aqui, e o servidor só repassa os recados
+// para as pessoas se acharem. As telas, a voz e o chat continuam indo direto
+// de uma pessoa para a outra. Publicado pelo GitHub Actions (login/wrangler.toml).
+
+import { DurableObject } from 'cloudflare:workers';
 
 const DIAS = 7;
 
@@ -23,6 +30,16 @@ export default {
       'Access-Control-Allow-Headers': 'content-type',
     };
     if (req.method === 'OPTIONS') return new Response(null, { headers: cors });
+
+    // servidor de conexão (protocolo do PeerJS)
+    if (url.pathname === '/peerjs/id') return new Response(crypto.randomUUID(), { headers: { 'Access-Control-Allow-Origin': origem, 'content-type': 'text/plain' } });
+    if (url.pathname === '/peerjs/peers') return Response.json([], { headers: { 'Access-Control-Allow-Origin': origem } });
+    if (url.pathname === '/peerjs') {
+      if (req.headers.get('Upgrade') !== 'websocket') return new Response('Esperava uma ligação WebSocket', { status: 426 });
+      const de = req.headers.get('Origin');
+      if (de && de !== origem) return new Response('Origem não permitida', { status: 403 });
+      return env.SINAL.get(env.SINAL.idFromName('midori')).fetch(req);
+    }
 
     const callback = url.origin + '/callback';
 
@@ -163,4 +180,48 @@ async function conferir(token, segredo) {
     const dados = JSON.parse(new TextDecoder().decode(deB64(corpo)));
     return dados.exp > Date.now() ? dados : null;
   } catch (e) { return null; }
+}
+
+// ---- servidor de conexão: um só "quadro de recados" para todo mundo ----
+// Usa WebSockets que hibernam: o Cloudflare só cobra quando chega recado.
+const SEM_SINAL = 60000;   // quem fica 1 min sem dar sinal perde o nome (o PeerJS manda sinal a cada 5 s)
+export class Sinal extends DurableObject {
+  async fetch(req) {
+    const url = new URL(req.url);
+    const id = url.searchParams.get('id') || '', token = url.searchParams.get('token') || '';
+    const [cliente, servidor] = Object.values(new WebSocketPair());
+    const recusar = (tipo, msg) => {
+      servidor.accept();
+      servidor.send(JSON.stringify({ type: tipo, payload: { msg } }));
+      servidor.close(1008, msg);
+      return new Response(null, { status: 101, webSocket: cliente });
+    };
+    if (url.searchParams.get('key') !== 'peerjs') return recusar('INVALID-KEY', 'Chave inválida');
+    if (!/^[\w-]{1,64}$/.test(id) || !token) return recusar('ERROR', 'Faltou o id ou o token');
+    // o nome já está em uso? se for a mesma pessoa voltando (mesmo token) ou uma ligação morta, troca
+    for (const w of this.ctx.getWebSockets(id)) {
+      const a = w.deserializeAttachment() || {};
+      if (a.token === token || Date.now() - (a.visto || 0) > SEM_SINAL) { try { w.close(1000, 'trocado'); } catch (e) {} }
+      else return recusar('ID-TAKEN', 'ID is taken');
+    }
+    this.ctx.acceptWebSocket(servidor, [id]);
+    servidor.serializeAttachment({ id, token, visto: Date.now() });
+    servidor.send(JSON.stringify({ type: 'OPEN' }));
+    return new Response(null, { status: 101, webSocket: cliente });
+  }
+
+  async webSocketMessage(ws, msg) {
+    const a = ws.deserializeAttachment(); if (!a) return;
+    a.visto = Date.now(); ws.serializeAttachment(a);
+    let d; try { d = JSON.parse(msg); } catch (e) { return; }
+    if (!d || d.type === 'HEARTBEAT' || typeof d.type !== 'string' || !d.dst) return;
+    const dst = String(d.dst);
+    const alvo = this.ctx.getWebSockets(dst).filter(w => w.readyState === 1).pop();
+    if (alvo) { try { alvo.send(JSON.stringify({ type: d.type, src: a.id, dst, payload: d.payload })); return; } catch (e) {} }
+    // ninguém com esse nome: avisa quem mandou (é assim que a Midori descobre que a sala não tem organizador)
+    if (d.type === 'OFFER') ws.send(JSON.stringify({ type: 'EXPIRE', src: dst, dst: a.id }));
+  }
+
+  async webSocketClose(ws, code) { try { ws.close(code === 1005 || code === 1006 ? 1000 : code, 'tchau'); } catch (e) {} }
+  async webSocketError(ws) { try { ws.close(1011, 'erro'); } catch (e) {} }
 }
