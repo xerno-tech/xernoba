@@ -212,3 +212,13 @@ $('ajCopiarRegistro').onclick = () => {
   const txt = `Midori v${VERSAO} · ${navigator.userAgent}\n` + registroConexao.map(x => `${horaSeg(x.ts)} ${x.texto}`).join('\n');
   navigator.clipboard.writeText(txt).then(() => toast('Registro copiado.'), () => toast('Não deu para copiar.', 'erro'));
 };
+
+$('ajDiagnostico').onclick = async () => {
+  const b = $('ajDiagnostico'); if (b.disabled) return;
+  b.disabled = true; b.textContent = '🩺 Testando…';
+  let txt;
+  try { txt = await gerarDiagnostico(); } catch (e) { txt = 'O diagnóstico falhou: ' + (e.message || e); }
+  b.disabled = false; b.textContent = '🩺 Gerar diagnóstico';
+  const saida = $('diagSaida'); saida.textContent = txt; saida.classList.remove('oculto');
+  navigator.clipboard.writeText(txt).then(() => toast('Diagnóstico copiado. É só colar.'), () => toast('Não deu para copiar: selecione o texto e copie à mão.', 'aviso'));
+};

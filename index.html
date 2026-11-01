@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Midori Xernoba</title>
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
-<link rel="stylesheet" href="css/midori.css?v=21">
+<link rel="stylesheet" href="css/midori.css?v=24">
 </head>
 <body>
 <button id="olho" title="Mostrar/ocultar interface"></button>
@@ -232,7 +232,9 @@
     <div class="passo oculto" data-painel="conexao">
       <span class="mut" style="font-size:12px">Quedas e reconexões desde que você abriu a página. Se você estiver caindo, mande um print disto.</span>
       <div id="registroConexao" class="registroConexao"></div>
-      <div class="rodape"><button class="sec" id="ajCopiarRegistro">📋 Copiar</button></div>
+      <div class="rodape"><button class="sec" id="ajCopiarRegistro">📋 Copiar</button><button id="ajDiagnostico">🩺 Gerar diagnóstico</button></div>
+      <span class="mut" style="font-size:12px">O diagnóstico testa o servidor, a sua rede e a ligação com cada pessoa (uns 10 segundos) e já copia o resultado para você colar. Não inclui o seu IP.</span>
+      <pre id="diagSaida" class="registroConexao oculto"></pre>
     </div>
 
     <div class="passo oculto" data-painel="admin">
@@ -263,18 +265,19 @@
 </div>
 
 <!-- Versão desta página. Sobe a cada atualização; quem estiver com uma mais antiga recebe o aviso. -->
-<script>const VERSAO = 23;</script>
-<script src="js/config.js?v=21"></script>
-<script src="js/base.js?v=21"></script>
-<script src="js/entrada.js?v=21"></script>
-<script src="js/sala.js?v=21"></script>
-<script src="js/admin.js?v=21"></script>
-<script src="js/voz.js?v=21"></script>
-<script src="js/telas.js?v=21"></script>
-<script src="js/ajustes.js?v=21"></script>
-<script src="js/chat.js?v=21"></script>
-<script src="js/transmissao.js?v=21"></script>
-<script src="js/conexao.js?v=21"></script>
-<script src="js/inicio.js?v=21"></script>
+<script>const VERSAO = 24;</script>
+<script src="js/config.js?v=24"></script>
+<script src="js/diagnostico.js?v=24"></script>
+<script src="js/base.js?v=24"></script>
+<script src="js/entrada.js?v=24"></script>
+<script src="js/sala.js?v=24"></script>
+<script src="js/admin.js?v=24"></script>
+<script src="js/voz.js?v=24"></script>
+<script src="js/telas.js?v=24"></script>
+<script src="js/ajustes.js?v=24"></script>
+<script src="js/chat.js?v=24"></script>
+<script src="js/transmissao.js?v=24"></script>
+<script src="js/conexao.js?v=24"></script>
+<script src="js/inicio.js?v=24"></script>
 </body>
 </html>
