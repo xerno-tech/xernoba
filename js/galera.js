@@ -358,3 +358,27 @@ function atualizarJogoTelas() {
     if (btn) btn.title = m.jogo ? `Avisar ${m.nome} que o jogo não é ${m.jogo}` : `Perguntar a ${m.nome} o que está jogando`;
   }
 }
+
+/* ---- admin troca o jogo de quem está transmitindo ---- */
+let jogoAdmAlvo = null;
+function abrirJogoAdmin(m) {
+  if (!souAdmin()) return;
+  jogoAdmAlvo = m.id;
+  $('jogoAdmTitulo').textContent = `Trocar o jogo de ${m.nome}`;
+  $('inJogoAdm').value = m.jogo || '';
+  $('popJogoAdm').classList.remove('oculto');
+  $('inJogoAdm').focus(); $('inJogoAdm').select();
+}
+function fecharJogoAdmin() { $('popJogoAdm').classList.add('oculto'); jogoAdmAlvo = null; }
+let jogoAdmEnviado = 0;
+ligarBuscaJogo($('inJogoAdm'), j => {
+  if (!jogoAdmAlvo || $('popJogoAdm').classList.contains('oculto')) return;
+  if (Date.now() - jogoAdmEnviado < 800) return;   // Enter e "sair do campo" não mandam duas vezes
+  jogoAdmEnviado = Date.now();
+  const m = membros.find(x => x.id === jogoAdmAlvo);
+  if (m && (m.jogo || '') === (j.nome || '')) { fecharJogoAdmin(); return; }
+  acaoAdmin('jogo', jogoAdmAlvo, { jogo: j.nome || '', capa: j.capa || '' });
+  fecharJogoAdmin();
+});
+$('jogoAdmFechar').onclick = fecharJogoAdmin;
+document.addEventListener('pointerdown', e => { const p = $('popJogoAdm'); if (!p.classList.contains('oculto') && !p.contains(e.target)) fecharJogoAdmin(); });

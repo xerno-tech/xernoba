@@ -234,7 +234,12 @@ function virarHub() {
           try { ca && ca.send({ tipo: 'silenciar', valor: sim }); } catch (e) {}
         } else if (d.acao === 'parar') {
           registrar(`${adm.nome} encerrou a transmissão de ${alvo.nome}`, null, null, 'nome', alvo.id);
-          try { ca && ca.send({ tipo: 'parar' }); } catch (e) {}
+          try { ca && ca.send({ tipo: 'parar' }); } catch (e) {}        } else if (d.acao === 'jogo') {
+          if (!alvo.live) return;
+          const jogo = String(d.jogo || '').trim().slice(0, 60);
+          const capa = capaValida(d.capa) ? d.capa : '';
+          registrar(jogo ? `${adm.nome} mudou o jogo de ${alvo.nome} para ${jogo} 🎮` : `${adm.nome} tirou o jogo de ${alvo.nome}`, null, null, 'nome', alvo.id);
+          try { ca && ca.send({ tipo: 'jogoPeloAdmin', jogo, capa, por: adm.nome }); } catch (e) {}
         }
         difundir();
       } else if (d.tipo === 'risco') {
@@ -326,6 +331,7 @@ function conectarHub() {
     else if (d.tipo === 'semLogin') { bloqueado = true; salvar('token', ''); salvar('erroLogin', 'sessao'); location.href = location.pathname; }
     else if (d.tipo === 'pedeSenha') { bloquear('senha', d.errada); }
     else if (d.tipo === 'silenciar') { aplicarSilencio(!!d.valor); }
+    else if (d.tipo === 'jogoPeloAdmin') { if (aoVivo) { definirJogo({ nome: d.jogo, capa: d.capa }); toast(`🛡️ ${esc(d.por)} mudou o seu jogo para <b>${esc(d.jogo || 'nenhum')}</b>.`, '', 6000); } }
     else if (d.tipo === 'parar') { if (aoVivo) { pararTransmissao(); toast('Um admin encerrou a sua transmissão.', 'aviso', 8000); } }
     else if (d.tipo === 'msg') addMsg(d);
     else if (d.tipo === 'historico') (d.msgs || []).forEach(x => addMsg(x, true));
@@ -412,6 +418,7 @@ function renderLista() {
         menu.onclick = e => e.stopPropagation();
         const item = (txt, fn, cls) => { const b = document.createElement('button'); b.textContent = txt; if (cls) b.className = cls; b.onclick = () => { menuAdm = null; fn(); renderLista(); }; menu.appendChild(b); };
         if (m.voz) item(m.silenciado ? '🎙️ Liberar o microfone' : '🔇 Silenciar na voz', () => acaoAdmin(m.silenciado ? 'liberar' : 'silenciar', m.id));
+        if (m.live) item('🎮 Trocar o jogo', () => abrirJogoAdmin(m));
         if (m.live) item('⏹ Parar a transmissão', () => acaoAdmin('parar', m.id));
         item('🚫 Expulsar da sala', () => { if (confirm(`Expulsar ${m.nome} da sala?`)) acaoAdmin('expulsar', m.id); }, 'perigo');
         // flutua por cima de tudo, colado no botão ⋯; se não couber embaixo, abre para cima

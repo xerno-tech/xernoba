@@ -15,7 +15,7 @@
 <meta name="twitter:card" content="summary_large_image">
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script>try { document.documentElement.dataset.tema = localStorage.getItem('tema') || 'verde'; } catch (e) {}</script>
-<link rel="stylesheet" href="css/midori.css?v=34">
+<link rel="stylesheet" href="css/midori.css?v=35">
 </head>
 <body>
 <button id="olho" title="Mostrar/ocultar interface"></button>
@@ -119,6 +119,12 @@
     <div id="faixaMini" class="oculto"></div>
     </div>
   </div>
+</div>
+
+<div id="popJogoAdm" class="oculto">
+  <div class="topo"><b id="jogoAdmTitulo">Trocar o jogo</b><button class="link" id="jogoAdmFechar" title="Fechar">✕</button></div>
+  <div class="buscaJogo"><input type="text" id="inJogoAdm" maxlength="60" placeholder="Digite e escolha o jogo…" autocomplete="off"><div class="sugestoes oculto"></div></div>
+  <span class="mut" style="font-size:12px">🛡️ Só admin. Enter usa o que você digitou; vazio tira o jogo.</span>
 </div>
 
 <!-- ================= JANELA DE TRANSMITIR ================= -->
@@ -320,20 +326,20 @@
 </div>
 
 <!-- Versão desta página. Sobe a cada atualização; quem estiver com uma mais antiga recebe o aviso. -->
-<script>const VERSAO = 34;</script>
-<script src="js/config.js?v=34"></script>
-<script src="js/diagnostico.js?v=34"></script>
-<script src="js/base.js?v=34"></script>
-<script src="js/entrada.js?v=34"></script>
-<script src="js/sala.js?v=34"></script>
-<script src="js/admin.js?v=34"></script>
-<script src="js/voz.js?v=34"></script>
-<script src="js/telas.js?v=34"></script>
-<script src="js/ajustes.js?v=34"></script>
-<script src="js/chat.js?v=34"></script>
-<script src="js/galera.js?v=34"></script>
-<script src="js/transmissao.js?v=34"></script>
-<script src="js/conexao.js?v=34"></script>
-<script src="js/inicio.js?v=34"></script>
+<script>const VERSAO = 35;</script>
+<script src="js/config.js?v=35"></script>
+<script src="js/diagnostico.js?v=35"></script>
+<script src="js/base.js?v=35"></script>
+<script src="js/entrada.js?v=35"></script>
+<script src="js/sala.js?v=35"></script>
+<script src="js/admin.js?v=35"></script>
+<script src="js/voz.js?v=35"></script>
+<script src="js/telas.js?v=35"></script>
+<script src="js/ajustes.js?v=35"></script>
+<script src="js/chat.js?v=35"></script>
+<script src="js/galera.js?v=35"></script>
+<script src="js/transmissao.js?v=35"></script>
+<script src="js/conexao.js?v=35"></script>
+<script src="js/inicio.js?v=35"></script>
 </body>
 </html>
