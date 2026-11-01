@@ -579,3 +579,15 @@ body:not(.naSala) { background:radial-gradient(1000px 600px at 50% 20%, rgba(var
 @media (max-width:760px) { #avisoJogo { max-width:calc(100vw - 24px); } }
 .marca, .salaNome, #txtSala { white-space:nowrap; }
 @media (max-width:1400px) { body.aoVivoAgora .marca { font-size:0; } body.aoVivoAgora .marca .logoIcone { font-size:16px; width:26px; height:26px; } }
+
+#avisoJogo.pedindo { animation:entra .2s, cutuca 1s .4s 2; }
+#avisoJogo.saindo { opacity:0; transform:translateY(-4px); transition:opacity .3s, transform .3s; }
+#avisoJogo button.apagado { color:var(--mut); font-weight:400; margin-left:6px; }
+@keyframes cutuca { 0%,100% { transform:translateX(0); } 20% { transform:translateX(-4px); } 40% { transform:translateX(4px); } 60% { transform:translateX(-2px); } 80% { transform:translateX(2px); } }
+
+/* jogo em cima da tela de quem você assiste */
+.jogoTela { position:absolute; top:10px; left:10px; z-index:3; display:flex; align-items:center; gap:6px; max-width:60%; background:rgba(var(--fundoRGB),.72);
+            border:1px solid rgba(255,255,255,.1); border-radius:8px; padding:3px 9px 3px 4px; font-size:12px; font-weight:600; pointer-events:none; }
+.jogoTela img { width:18px; height:24px; object-fit:cover; border-radius:3px; }
+.jogoTela span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+body.limpo .jogoTela { display:none; }

@@ -283,6 +283,7 @@ export class Dados extends DurableObject {
     sql.exec(`CREATE INDEX IF NOT EXISTS msgs_sala ON msgs (sala, ts)`);
     sql.exec(`CREATE TABLE IF NOT EXISTS figs (id TEXT PRIMARY KEY, nome TEXT, tipo TEXT, autor TEXT, autorNome TEXT, ts INTEGER, tam INTEGER, dados BLOB)`);
     sql.exec(`CREATE TABLE IF NOT EXISTS minutos (chave TEXT PRIMARY KEY, ts INTEGER)`);
+    sql.exec(`CREATE TABLE IF NOT EXISTS jogosPessoa (did TEXT, nome TEXT, capa TEXT, ts INTEGER, PRIMARY KEY (did, nome))`);
     sql.exec(`CREATE TABLE IF NOT EXISTS stats (mes TEXT, tipo TEXT, chave TEXT, nome TEXT, valor INTEGER, PRIMARY KEY (mes, tipo, chave))`);
   }
   async fetch(req) {
@@ -340,6 +341,23 @@ export class Dados extends DurableObject {
       if (!f) return json({ ok: false }, 404);
       if (f.autor !== String(eu.id || '')) return json({ ok: false, erro: 'dono' }, 403);
       sql.exec(`DELETE FROM figs WHERE id = ?`, String(d.id));
+      return json({ ok: true });
+    }
+
+    // --- jogos que cada pessoa já jogou (vale em qualquer computador) ---
+    const did = String(eu.id || '');
+    if (rota === '/jogos/meus') {
+      return json({ ok: true, jogos: sql.exec(`SELECT nome, capa FROM jogosPessoa WHERE did = ? ORDER BY ts DESC LIMIT 10`, did).toArray() });
+    }
+    if (rota === '/jogos/lembrar') {
+      const nome = String(d.nome || '').trim().slice(0, 60); if (!did || !nome) return json({ ok: false }, 400);
+      const capa = typeof d.capa === 'string' && /^https:\/\//.test(d.capa) && d.capa.length < 300 ? d.capa : '';
+      sql.exec(`INSERT INTO jogosPessoa (did, nome, capa, ts) VALUES (?, ?, ?, ?) ON CONFLICT (did, nome) DO UPDATE SET ts = excluded.ts, capa = CASE WHEN excluded.capa <> '' THEN excluded.capa ELSE capa END`, did, nome, capa, Date.now());
+      sql.exec(`DELETE FROM jogosPessoa WHERE did = ? AND nome NOT IN (SELECT nome FROM jogosPessoa WHERE did = ? ORDER BY ts DESC LIMIT 10)`, did, did);
+      return json({ ok: true });
+    }
+    if (rota === '/jogos/esquecer') {
+      sql.exec(`DELETE FROM jogosPessoa WHERE did = ? AND nome = ?`, did, String(d.nome || ''));
       return json({ ok: true });
     }
 

@@ -99,7 +99,7 @@ function virarHub() {
     guardarNoHistorico(msg);
   };
   const difundir = () => {
-    const lista = [...roster.values()].map(({ cid: _c, _expulso, _did, ...m }) => m);
+    const lista = [...roster.values()].map(({ cid: _c, _expulso, _did, _pedidos, _ultimaFig, ...m }) => m);
     const regras = { banidos: [...banidos], nomesBanidos, silenciados: [...silenciados], senhaHash, autorizados: [...autorizados], adminsAvisados: [...adminsAvisados] };
     for (const c of conns.values()) if (c.open) try { c.send({ tipo: 'lista', membros: lista, regras }); } catch (e) {}
   };
@@ -243,6 +243,13 @@ function virarHub() {
         if (!pts.length) return;
         const msg = { tipo: 'risco', alvo: d.alvo, autor: c.peer, novo: !!d.novo, pts, cor: m.cor || corDe(m.nome) };
         for (const x of conns.values()) if (x.open) try { x.send(msg); } catch (e) {}
+      } else if (d.tipo === 'pedirJogo') {
+        const m = roster.get(c.peer), alvo = roster.get(d.alvo); if (!m || !alvo || !alvo.live || alvo.id === m.id) return;
+        m._pedidos = m._pedidos || {};
+        if (Date.now() - (m._pedidos[alvo.id] || 0) < 25000) return;   // sem encher o saco
+        m._pedidos[alvo.id] = Date.now();
+        const ca = conns.get(alvo.id);
+        try { ca && ca.open && ca.send({ tipo: 'pedidoJogo', de: m.nome, motivo: d.motivo === 'errado' ? 'errado' : 'falta' }); } catch (e) {}
       } else if (d.tipo === 'figurinha') {
         const m = roster.get(c.peer); if (!m || typeof d.id !== 'string' || d.id.length > 40) return;
         if (Date.now() - (m._ultimaFig || 0) < 2000) return;   // sem metralhadora
@@ -313,6 +320,7 @@ function conectarHub() {
     else if (d.tipo === 'digitando') { digitandoAgora.set(d.id, { nome: d.nome, ate: Date.now() + 4000 }); mostrarDigitando(); }
     else if (d.tipo === 'reacao') { mostrarReacao(d); }
     else if (d.tipo === 'figurinha') { receberFig(d); }
+    else if (d.tipo === 'pedidoJogo') { receberPedidoJogo(d); }
     else if (d.tipo === 'risco') { receberRisco(d); }
     else if (d.tipo === 'expulso') { bloquear('expulso'); }
     else if (d.tipo === 'semLogin') { bloqueado = true; salvar('token', ''); salvar('erroLogin', 'sessao'); location.href = location.pathname; }
@@ -424,7 +432,7 @@ function renderLista() {
       div.onmouseleave = esconderPrevia;
     }
   }
-  renderLobby();
+  renderLobby(); atualizarJogoTelas();
   for (const id of [...miniaturasRec.keys()]) if (!membros.some(m => m.id === id && m.live)) miniaturasRec.delete(id);
   for (const id of [...assistindo.keys()]) if (!membros.some(m => m.id === id && m.live)) pararDeAssistir(id);
   sincronizarVoz();

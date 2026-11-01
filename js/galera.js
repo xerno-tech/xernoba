@@ -243,6 +243,21 @@ function lembrarJogo(j) {
   const capa = capaValida(j.capa) ? j.capa : (antigo && antigo.capa) || '';
   jogosRecentes = [{ nome: j.nome, capa }, ...jogosRecentes.filter(x => x.nome.toLowerCase() !== j.nome.toLowerCase())].slice(0, 10);
   salvar('jogosRecentes', JSON.stringify(jogosRecentes)); desenharRecentes();
+  if (temServidorDados()) dadosAPI('/jogos/lembrar', { nome: j.nome, capa }).catch(() => {});
+}
+// a lista fica guardada no servidor, por pessoa (a conta do Discord): aparece em qualquer computador
+async function carregarJogosDaPessoa() {
+  if (!temServidorDados()) return;
+  try {
+    const r = await dadosAPI('/jogos/meus').then(x => x.json());
+    if (!r || !r.ok) return;
+    const doServidor = r.jogos.filter(j => j && j.nome);
+    // junta com o que já estava neste navegador (o servidor manda na ordem)
+    const locais = jogosRecentes.filter(x => !doServidor.some(j => j.nome.toLowerCase() === x.nome.toLowerCase()));
+    for (const j of locais) dadosAPI('/jogos/lembrar', j).catch(() => {});
+    jogosRecentes = [...doServidor, ...locais].slice(0, 10);
+    salvar('jogosRecentes', JSON.stringify(jogosRecentes)); desenharRecentes();
+  } catch (e) {}
 }
 function desenharRecentes() {
   document.querySelectorAll('.recentesJogo').forEach(box => {
@@ -250,7 +265,7 @@ function desenharRecentes() {
     box.innerHTML = jogosRecentes.length ? '<span class="rot">Já jogados:</span>' + jogosRecentes.map((j, i) => `<button type="button" class="chipJogo ${j.nome === jogoAtual ? 'sel' : ''}" data-i="${i}" title="${esc(j.nome)}">${capaValida(j.capa) ? `<img src="${esc(j.capa)}" alt="">` : '🎮'}<span>${esc(j.nome)}</span><i data-tirar="${i}" title="Tirar da lista">✕</i></button>`).join('') : '';
     box.querySelectorAll('.chipJogo').forEach(b => b.onclick = e => {
       const tirar = e.target.dataset.tirar;
-      if (tirar !== undefined) { jogosRecentes.splice(Number(tirar), 1); salvar('jogosRecentes', JSON.stringify(jogosRecentes)); desenharRecentes(); return; }
+      if (tirar !== undefined) { const [fora] = jogosRecentes.splice(Number(tirar), 1); salvar('jogosRecentes', JSON.stringify(jogosRecentes)); desenharRecentes(); if (fora && temServidorDados()) dadosAPI('/jogos/esquecer', { nome: fora.nome }).catch(() => {}); return; }
       definirJogo(jogosRecentes[Number(b.dataset.i)]);
       if (box.closest('#popJogo')) $('popJogo').classList.add('oculto');
     });
@@ -274,6 +289,7 @@ function mostrarJogo() {
 $('inJogo').value = jogoAtual;
 ligarBuscaJogo($('inJogo'), definirJogo);
 setTimeout(() => { if (temServidorDados()) buscarJogos('zelda'); }, 4000);
+carregarJogosDaPessoa();
 ligarBuscaJogo($('inJogo2'), j => { definirJogo(j); $('popJogo').classList.add('oculto'); });
 // dá para trocar o jogo durante a transmissão, sem parar
 $('btnJogo').onclick = e => {
@@ -285,16 +301,60 @@ document.addEventListener('pointerdown', e => { const p = $('popJogo'); if (!p.c
 mostrarJogo();
 desenharRecentes();
 
-// aviso pequeno para quem acabou de começar a transmitir
-let tAvisoJogo = null;
-function avisoAoVivo() {
+// aviso pequeno para quem está transmitindo. Sem jogo escolhido, ele some e volta a cada 2 minutos.
+let tAvisoJogo = null, tVoltaAviso = null, semLembrarNestaLive = false;
+function avisoAoVivo(primeira) {
+  if (!aoVivo) return;
+  if (primeira) semLembrarNestaLive = false;
+  if (!jogoAtual && semLembrarNestaLive) return;
+  if (jogoAtual && !primeira) return;
   const b = $('avisoJogo');
   b.innerHTML = jogoAtual
     ? `🎮 Transmitindo <b>${esc(jogoAtual)}</b>. <button class="link" id="avisoTrocar">Trocar</button>`
-    : `🎮 Diga o que você está jogando: aparece para a galera e conta nas estatísticas. <button class="link" id="avisoTrocar">Escolher</button>`;
-  b.classList.remove('oculto'); b.classList.toggle('pedindo', !jogoAtual);
+    : `🎮 Diga o que você está jogando: aparece para a galera e conta nas estatísticas. <button class="link" id="avisoTrocar">Escolher</button><button class="link apagado" id="avisoChega" title="Não lembrar mais nesta transmissão">Agora não</button>`;
+  b.classList.remove('oculto', 'saindo'); b.classList.toggle('pedindo', !jogoAtual);
   $('avisoTrocar').onclick = e => { e.stopPropagation(); esconderAvisoJogo(); $('btnJogo').click(); };
-  clearTimeout(tAvisoJogo); tAvisoJogo = setTimeout(esconderAvisoJogo, jogoAtual ? 6000 : 15000);
+  const chega = $('avisoChega'); if (chega) chega.onclick = e => { e.stopPropagation(); semLembrarNestaLive = true; esconderAvisoJogo(); };
+  clearTimeout(tAvisoJogo); tAvisoJogo = setTimeout(() => sumirAvisoJogo(), jogoAtual ? 6000 : 15000);
+  clearTimeout(tVoltaAviso);
+  if (!jogoAtual) tVoltaAviso = setTimeout(() => avisoAoVivo(false), 2 * 60000);
 }
-function esconderAvisoJogo() { clearTimeout(tAvisoJogo); const b = $('avisoJogo'); if (b) b.classList.add('oculto'); }
+function sumirAvisoJogo() {
+  const b = $('avisoJogo'); if (!b || b.classList.contains('oculto')) return;
+  b.classList.add('saindo'); setTimeout(() => b.classList.add('oculto'), 300);
+}
+function esconderAvisoJogo() { clearTimeout(tAvisoJogo); clearTimeout(tVoltaAviso); const b = $('avisoJogo'); if (b) b.classList.add('oculto'); }
 
+/* ---- quem assiste pode perguntar o jogo ou avisar que está errado ---- */
+const ultimoPedido = new Map();
+function pedirJogo(alvo) {
+  const m = membros.find(x => x.id === alvo && x.live); if (!m) return;
+  if (Date.now() - (ultimoPedido.get(alvo) || 0) < 30000) return toast('Você já avisou há pouco. Dá um tempinho 🙂', 'aviso', 2000);
+  if (!hubConn || !hubConn.open) return toast('Sem ligação com a sala agora.', 'aviso');
+  ultimoPedido.set(alvo, Date.now());
+  hubConn.send({ tipo: 'pedirJogo', alvo, motivo: m.jogo ? 'errado' : 'falta' });
+  toast(m.jogo ? `Avisado: ${esc(m.nome)} vai ver que o jogo parece não ser <b>${esc(m.jogo)}</b>.` : `Pedido enviado: ${esc(m.nome)} vai ver que você quer saber o jogo.`, '', 3500);
+}
+// quem transmite recebe o pedido como o mesmo aviso pequeno, com o botão para atualizar
+function receberPedidoJogo(d) {
+  if (!aoVivo) return;
+  const b = $('avisoJogo');
+  b.innerHTML = d.motivo === 'errado' && jogoAtual
+    ? `👀 <b>${esc(d.de)}</b> acha que o jogo não é <b>${esc(jogoAtual)}</b>. <button class="link" id="avisoTrocar">Atualizar</button>`
+    : `👀 <b>${esc(d.de)}</b> quer saber o que você está jogando. <button class="link" id="avisoTrocar">Escolher</button>`;
+  b.classList.remove('oculto', 'saindo'); b.classList.add('pedindo');
+  $('avisoTrocar').onclick = e => { e.stopPropagation(); esconderAvisoJogo(); $('btnJogo').click(); };
+  clearTimeout(tAvisoJogo); tAvisoJogo = setTimeout(() => sumirAvisoJogo(), 15000);
+  try { tocar('msg'); } catch (e) {}
+}
+// mostra o jogo em cima de cada tela que você assiste
+function atualizarJogoTelas() {
+  for (const [id, it] of assistindo) {
+    const m = membros.find(x => x.id === id); if (!m || !it.tela) continue;
+    let et = it.tela.querySelector('.jogoTela');
+    if (!et) { et = document.createElement('div'); et.className = 'jogoTela'; it.tela.appendChild(et); }
+    et.innerHTML = m.jogo ? `${m.jogoCapa && capaValida(m.jogoCapa) ? `<img src="${esc(m.jogoCapa)}" alt="">` : '🎮'}<span>${esc(m.jogo)}</span>` : '<span class="mut">🎮 jogo não informado</span>';
+    const btn = it.tela.querySelector('[data-a=jogo]');
+    if (btn) btn.title = m.jogo ? `Avisar ${m.nome} que o jogo não é ${m.jogo}` : `Perguntar a ${m.nome} o que está jogando`;
+  }
+}

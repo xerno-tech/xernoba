@@ -252,7 +252,7 @@ async function iniciarTransmissao() {
     for (const id of assistentes.keys()) enviarPara(id);
     atualizarAoVivo();
     enviarEstado();
-    if (comecando) setTimeout(avisoAoVivo, 600);
+    if (comecando) setTimeout(() => avisoAoVivo(true), 600);
     if (!faltaSom) toast('Você está <b>ao vivo</b>. Seus amigos já podem clicar em Assistir.');
     setTimeout(enviarMiniatura, 2500);
     setTimeout(mostrarSaida, 1200);

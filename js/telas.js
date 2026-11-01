@@ -8,6 +8,7 @@ function criarTela(id, titulo, local) {
     ${local ? '<span class="selo">VOCÊ · AO VIVO</span>' : ''}
     <div class="ctrl"><span class="n"></span>
       ${local ? '<span class="mut" style="font-size:12px">sem som pra você</span>' : '<button data-a="mute" title="Mutar esta transmissão">🔊</button><input type="range" min="0" max="2" step="0.05" value="1" title="Volume (até 200%)"><span class="pct">100%</span>'}
+      ${local ? '' : '<button data-a="jogo" title="Perguntar o jogo / avisar que está errado">🎮?</button>'}
       <button data-a="lapis" title="Rabiscar na tela">✏️</button>
       <button data-a="mini" title="Minimizar">🗕</button>
       <button data-a="info" title="Painel de conexão">ⓘ</button>
@@ -48,6 +49,7 @@ function criarTela(id, titulo, local) {
   t.querySelector('[data-a=chatCinema]').onclick = e => { e.stopPropagation(); alternarChatCinema(); };
   t.querySelector('[data-a=cinemaTodas]').onclick = e => { e.stopPropagation(); alternarCinemaTodas(t); };
   const f = t.querySelector('[data-a=fechar]'); if (f) f.onclick = () => pararDeAssistir(id);
+  const bj = t.querySelector('[data-a=jogo]'); if (bj) bj.onclick = e => { e.stopPropagation(); pedirJogo(id); };
   v.ondblclick = () => t.querySelector('[data-a=cheia]').click();
   v.onclick = () => { if (t.classList.contains('mini')) minimizar(t, false); else if (layout === 'destaque') focar(t); };
   if (local) $('grade').prepend(t); else $('grade').appendChild(t);
