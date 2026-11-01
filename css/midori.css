@@ -488,3 +488,46 @@ body:not(.naSala) { background:radial-gradient(1000px 600px at 50% 20%, rgba(var
 .statsBloco .pos { width:24px; text-align:center; }
 .statsBloco .nm { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .statsBloco .v { color:var(--mut); font-variant-numeric:tabular-nums; }
+
+/* ---------- Ajustes: janela larga com menu lateral ---------- */
+#ajustes { backdrop-filter:blur(3px); }
+.ajCaixa { width:min(820px,100%); height:min(640px, calc(100vh - 32px)); display:flex; flex-direction:column; overflow:hidden; padding:0;
+           box-shadow:0 24px 70px rgba(0,0,0,.55); }
+.ajTopo { display:flex; align-items:center; padding:16px 18px 14px 22px; border-bottom:1px solid var(--linha); }
+.ajTopo h2 { margin:0; font-size:18px; flex:1; }
+.ajTopo button { font-size:18px; padding:4px 10px; }
+.ajCorpo { flex:1; display:flex; min-height:0; }
+#ajustes .abas { flex-direction:column; flex-wrap:nowrap; gap:2px; width:200px; flex-shrink:0; padding:12px 10px; border-bottom:0; border-right:1px solid var(--linha); background:var(--panel2); overflow:auto; }
+#ajustes .abas button { display:flex; align-items:center; gap:10px; text-align:left; border:0; border-radius:9px; padding:9px 12px; font-size:14px; color:var(--mut); }
+#ajustes .abas button .ic { width:20px; text-align:center; font-size:15px; }
+#ajustes .abas button:hover { background:var(--panel3); color:var(--txt); }
+#ajustes .abas button.sel { background:rgba(var(--accRGB),.16); color:var(--txt); box-shadow:inset 3px 0 0 var(--acc); }
+.ajPaineis { flex:1; overflow:auto; min-width:0; }
+.ajPaineis .passo { padding:20px 24px 26px; gap:14px; }
+.ajTitulo { display:flex; flex-direction:column; gap:2px; margin-bottom:2px; }
+.ajTitulo h3 { margin:0; font-size:17px; }
+.ajTitulo span { font-size:12.5px; color:var(--mut); }
+.grupo { display:flex; flex-direction:column; gap:10px; background:var(--panel2); border:1px solid var(--linha); border-radius:12px; padding:14px 16px; }
+.grupo h4 { margin:0 0 2px; font-size:13px; font-weight:600; color:var(--txt); }
+.grupo .marcar { color:var(--txt); font-size:13.5px; }
+.linhaCtrl { display:flex; align-items:center; gap:10px; }
+.linhaCtrl > span { font-size:12.5px; color:var(--mut); min-width:72px; }
+.linhaCtrl input[type=range] { flex:1; accent-color:var(--acc); }
+.linhaCtrl select { flex:1; }
+.linhaCtrl button { padding:6px 12px; font-size:12.5px; }
+.ajPaineis .campo { color:var(--txt); font-size:13.5px; }
+.ajPaineis .marcar { color:var(--txt); }
+@media (max-width:640px) {
+  .ajCaixa { height:calc(100vh - 16px); }
+  #ajustes { padding:8px; }
+  .ajCorpo { flex-direction:column; }
+  #ajustes .abas { flex-direction:row; width:auto; border-right:0; border-bottom:1px solid var(--linha); padding:8px; overflow-x:auto; overflow-y:hidden; }
+  #ajustes .abas button { flex-shrink:0; padding:8px 10px; font-size:13px; gap:6px; }
+  #ajustes .abas button.sel { box-shadow:inset 0 -2px 0 var(--acc); }
+  .ajPaineis .passo { padding:16px; }
+}
+
+.linhaCtrl select { font-size:13.5px; padding:7px 9px; }
+#btnJogo { max-width:200px; overflow:hidden; text-overflow:ellipsis; }
+#btnJogo.semJogo { border-color:var(--acc); color:var(--accTxt); }
+@media (max-width:760px) { #btnJogo { max-width:140px; } }

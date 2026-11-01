@@ -229,3 +229,6 @@ seg('ajTema', 'c', document.documentElement.dataset.tema || 'verde', v => { docu
 
 $('ajSonsGalera').checked = ler('sonsGalera') !== '0';
 $('ajSonsGalera').onchange = () => { tocarSonsGalera = $('ajSonsGalera').checked; salvar('sonsGalera', tocarSonsGalera ? '1' : '0'); };
+// fecha os Ajustes com Esc ou clicando fora da janela
+addEventListener('keydown', e => { if (e.key === 'Escape' && !$('ajustes').classList.contains('oculto')) $('ajustes').classList.add('oculto'); });
+$('ajustes').addEventListener('pointerdown', e => { if (e.target === $('ajustes')) $('ajustes').classList.add('oculto'); });

@@ -188,4 +188,13 @@ function retratoDaSala(roster) {
 /* =================== O QUE VOCÊ VAI JOGAR =================== */
 let jogoAtual = ler('jogo') || '';
 $('inJogo').value = jogoAtual;
-$('inJogo').oninput = () => { jogoAtual = $('inJogo').value.trim().slice(0, 40); salvar('jogo', jogoAtual); if (aoVivo) enviarEstado(); };
+function definirJogo(v) {
+  jogoAtual = String(v || '').trim().slice(0, 40); salvar('jogo', jogoAtual);
+  $('inJogo').value = jogoAtual; mostrarJogo();
+  if (aoVivo) enviarEstado();
+}
+function mostrarJogo() { const b = $('btnJogo'); b.textContent = jogoAtual ? '🎮 ' + jogoAtual : '🎮 Qual jogo?'; b.classList.toggle('semJogo', !jogoAtual); }
+$('inJogo').oninput = () => definirJogo($('inJogo').value);
+// dá para trocar o jogo durante a transmissão, sem parar
+$('btnJogo').onclick = () => { const v = prompt('O que você está jogando agora?', jogoAtual); if (v !== null) definirJogo(v); };
+mostrarJogo();

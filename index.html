@@ -15,7 +15,7 @@
 <meta name="twitter:card" content="summary_large_image">
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script>try { document.documentElement.dataset.tema = localStorage.getItem('tema') || 'verde'; } catch (e) {}</script>
-<link rel="stylesheet" href="css/midori.css?v=27">
+<link rel="stylesheet" href="css/midori.css?v=28">
 </head>
 <body>
 <button id="olho" title="Mostrar/ocultar interface"></button>
@@ -55,6 +55,7 @@
     <span class="esp"></span>
     <div id="aoVivoBox" class="oculto">
       <span class="pilula" id="pilula">AO VIVO</span>
+      <button class="sec" id="btnJogo" title="Dizer o que você está jogando (aparece para a galera e nas estatísticas)">🎮 Qual jogo?</button>
       <button class="sec" id="btnSom" title="Escolher de onde vem o som">🔊 Som</button>
       <button class="sec" id="btnTrocar">Trocar</button>
       <button class="perigo" id="btnParar">Parar</button>
@@ -200,11 +201,21 @@
 
 <!-- ================= AJUSTES ================= -->
 <div id="ajustes" class="oculto">
-  <div class="caixa">
-    <div class="passo" style="padding-bottom:6px"><div class="topo"><h2>⚙️ Ajustes</h2><button class="link" id="fecharAjustes">✕</button></div></div>
-    <div class="abas"><button data-aba="perfil" class="sel">Perfil</button><button data-aba="sons">Sons e avisos</button><button data-aba="layout">Layout</button><button data-aba="stats">📊 Estatísticas</button><button data-aba="conexao">📶 Conexão</button><button data-aba="admin">🛡️ Admin</button></div>
+  <div class="caixa ajCaixa">
+    <div class="ajTopo"><h2>Ajustes</h2><button class="link" id="fecharAjustes" title="Fechar (Esc)">✕</button></div>
+    <div class="ajCorpo">
+    <nav class="abas">
+      <button data-aba="perfil" class="sel"><span class="ic">👤</span>Perfil</button>
+      <button data-aba="sons"><span class="ic">🔔</span>Sons e avisos</button>
+      <button data-aba="layout"><span class="ic">🎨</span>Aparência</button>
+      <button data-aba="stats"><span class="ic">📊</span>Estatísticas</button>
+      <button data-aba="conexao"><span class="ic">📶</span>Conexão</button>
+      <button data-aba="admin"><span class="ic">🛡️</span>Admin</button>
+    </nav>
+    <div class="ajPaineis">
 
     <div class="passo" data-painel="perfil">
+      <div class="ajTitulo"><h3>Perfil</h3><span>Como você aparece para a galera.</span></div>
       <div class="linhaPerfil"><div class="avatar" id="prevAvatar"></div><b id="prevNome"></b></div>
       <label class="campo">Nome
         <div class="linha" style="display:flex;gap:8px"><input type="text" id="ajNome" maxlength="24"><button id="ajSalvarNome">Salvar</button></div>
@@ -216,29 +227,32 @@
     </div>
 
     <div class="passo oculto" data-painel="sons">
-      <label class="marcar"><input type="checkbox" data-som="sala"> Alguém entrou ou saiu da sala</label>
-      <label class="marcar"><input type="checkbox" data-som="msg"> Nova mensagem no chat</label>
-      <label class="marcar"><input type="checkbox" data-som="live"> Alguém começou a transmitir</label>
-      <label class="marcar"><input type="checkbox" data-som="voz"> Alguém entrou ou saiu da voz</label>
-      <label class="marcar"><input type="checkbox" id="ajSonsGalera"> Tocar os sons da galera (🎭)</label>
-      <label class="campo">Volume dos sons <input type="range" id="ajVolSom" min="0" max="1" step="0.05" style="accent-color:var(--acc)"></label>
-      <div class="campo" style="margin-top:6px">🗣️ Leitura em voz alta (TTS)
-        <label class="marcar"><input type="checkbox" id="ajTtsOuvir"> Ouvir as mensagens TTS dos outros (quando eu estiver na voz)</label>
-        <label class="marcar"><input type="checkbox" id="ajTtsAoVivo"> Não ler enquanto eu transmito a tela inteira (para a leitura não ir junto)</label>
-        <select id="ajTtsVoz"></select>
-        <div style="display:flex;gap:10px;align-items:center">
-          <span class="mut" style="font-size:12px;min-width:56px">Volume</span><input type="range" id="ajTtsVol" min="0" max="1" step="0.05" style="flex:1;accent-color:var(--acc)">
-        </div>
-        <div style="display:flex;gap:10px;align-items:center">
-          <span class="mut" style="font-size:12px;min-width:56px">Velocidade</span><input type="range" id="ajTtsVel" min="0.7" max="1.6" step="0.05" style="flex:1;accent-color:var(--acc)">
-        </div>
-        <div class="rodape" style="justify-content:flex-start"><button class="sec" id="ajTtsTestar">🗣️ Testar voz</button></div>
+      <div class="ajTitulo"><h3>Sons e avisos</h3></div>
+      <div class="grupo">
+        <h4>Tocar um som quando…</h4>
+        <label class="marcar"><input type="checkbox" data-som="sala"> Alguém entrar ou sair da sala</label>
+        <label class="marcar"><input type="checkbox" data-som="msg"> Chegar mensagem no chat</label>
+        <label class="marcar"><input type="checkbox" data-som="live"> Alguém começar a transmitir</label>
+        <label class="marcar"><input type="checkbox" data-som="voz"> Alguém entrar ou sair da voz</label>
+        <label class="marcar"><input type="checkbox" id="ajSonsGalera"> Alguém tocar um som da galera (🎭)</label>
+        <div class="linhaCtrl"><span>Volume</span><input type="range" id="ajVolSom" min="0" max="1" step="0.05"><button class="sec" id="ajTestarSom">🔔 Testar</button></div>
       </div>
-      <label class="marcar"><input type="checkbox" id="ajNotif"> Avisar no Windows quando a aba estiver em segundo plano (mensagens e transmissões)</label>
-      <div class="rodape"><button class="sec" id="ajTestarSom">🔔 Testar som</button></div>
+      <div class="grupo">
+        <h4>🗣️ Leitura em voz alta (TTS)</h4>
+        <label class="marcar"><input type="checkbox" id="ajTtsOuvir"> Ouvir as mensagens TTS dos outros (quando eu estiver na voz)</label>
+        <label class="marcar"><input type="checkbox" id="ajTtsAoVivo"> Não ler enquanto eu transmito a tela inteira</label>
+        <div class="linhaCtrl"><span>Voz</span><select id="ajTtsVoz"></select></div>
+        <div class="linhaCtrl"><span>Volume</span><input type="range" id="ajTtsVol" min="0" max="1" step="0.05"></div>
+        <div class="linhaCtrl"><span>Velocidade</span><input type="range" id="ajTtsVel" min="0.7" max="1.6" step="0.05"><button class="sec" id="ajTtsTestar">🗣️ Testar</button></div>
+      </div>
+      <div class="grupo">
+        <h4>Notificações</h4>
+        <label class="marcar"><input type="checkbox" id="ajNotif"> Avisar no Windows quando a aba estiver em segundo plano (mensagens e transmissões)</label>
+      </div>
     </div>
 
     <div class="passo oculto" data-painel="layout">
+      <div class="ajTitulo"><h3>Aparência</h3><span>Vale só para você, neste navegador.</span></div>
       <div class="campo">Cor da Midori
         <div class="segmentado" id="ajTema"><button data-c="verde">🟢 Verde</button><button data-c="vermelho">🔴 Vermelho</button><button data-c="roxo">🟣 Roxo</button><button data-c="azul">🔵 Azul</button></div>
       </div>
@@ -255,12 +269,14 @@
     </div>
 
     <div class="passo oculto" data-painel="stats">
+      <div class="ajTitulo"><h3>Estatísticas</h3><span>Contadas minuto a minuto enquanto tem gente na sala.</span></div>
       <div class="campo">Mês <select id="statsMes"></select></div>
       <div id="statsCorpo"></div>
     </div>
 
     <div class="passo oculto" data-painel="conexao">
-      <span class="mut" style="font-size:12px">Quedas e reconexões desde que você abriu a página. Se você estiver caindo, mande um print disto.</span>
+      <div class="ajTitulo"><h3>Conexão</h3><span>Quedas e reconexões desde que você abriu a página.</span></div>
+
       <div id="registroConexao" class="registroConexao"></div>
       <div class="rodape"><button class="sec" id="ajCopiarRegistro">📋 Copiar</button><button id="ajDiagnostico">🩺 Gerar diagnóstico</button></div>
       <span class="mut" style="font-size:12px">O diagnóstico testa o servidor, a sua rede e a ligação com cada pessoa (uns 10 segundos) e já copia o resultado para você colar. Não inclui o seu IP.</span>
@@ -268,6 +284,7 @@
     </div>
 
     <div class="passo oculto" data-painel="admin">
+      <div class="ajTitulo"><h3>Admin</h3></div>
       <div id="admSemConfig" class="oculto" style="display:flex;flex-direction:column;gap:12px">
         <div class="nota">O admin ainda não foi configurado. Crie a senha de admin aqui: a página gera um <b>código</b> a partir dela. Mande só o código para o Claude colocar no site. A senha em si nunca vai para o GitHub.</div>
         <label class="campo">Nova senha de admin <input type="password" id="admNovaSenha" autocomplete="new-password"></label>
@@ -291,24 +308,26 @@
         <div class="rodape"><button class="sec" id="admRemoverSenha">Remover senha da sala</button><button class="sec" id="admSair">Sair do modo admin</button></div>
       </div>
     </div>
+    </div>
+    </div>
   </div>
 </div>
 
 <!-- Versão desta página. Sobe a cada atualização; quem estiver com uma mais antiga recebe o aviso. -->
-<script>const VERSAO = 27;</script>
-<script src="js/config.js?v=27"></script>
-<script src="js/diagnostico.js?v=27"></script>
-<script src="js/base.js?v=27"></script>
-<script src="js/entrada.js?v=27"></script>
-<script src="js/sala.js?v=27"></script>
-<script src="js/admin.js?v=27"></script>
-<script src="js/voz.js?v=27"></script>
-<script src="js/telas.js?v=27"></script>
-<script src="js/ajustes.js?v=27"></script>
-<script src="js/chat.js?v=27"></script>
-<script src="js/galera.js?v=27"></script>
-<script src="js/transmissao.js?v=27"></script>
-<script src="js/conexao.js?v=27"></script>
-<script src="js/inicio.js?v=27"></script>
+<script>const VERSAO = 28;</script>
+<script src="js/config.js?v=28"></script>
+<script src="js/diagnostico.js?v=28"></script>
+<script src="js/base.js?v=28"></script>
+<script src="js/entrada.js?v=28"></script>
+<script src="js/sala.js?v=28"></script>
+<script src="js/admin.js?v=28"></script>
+<script src="js/voz.js?v=28"></script>
+<script src="js/telas.js?v=28"></script>
+<script src="js/ajustes.js?v=28"></script>
+<script src="js/chat.js?v=28"></script>
+<script src="js/galera.js?v=28"></script>
+<script src="js/transmissao.js?v=28"></script>
+<script src="js/conexao.js?v=28"></script>
+<script src="js/inicio.js?v=28"></script>
 </body>
 </html>
