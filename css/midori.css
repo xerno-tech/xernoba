@@ -591,3 +591,4 @@ body:not(.naSala) { background:radial-gradient(1000px 600px at 50% 20%, rgba(var
 .jogoTela img { width:18px; height:24px; object-fit:cover; border-radius:3px; }
 .jogoTela span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 body.limpo .jogoTela { display:none; }
+.buscaJogo .sugestoes { max-height:min(380px, 55vh); }

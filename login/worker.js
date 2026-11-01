@@ -432,19 +432,24 @@ async function buscarJogosTodos(q, env) {
       for (const j of st) if (!jogos.some(x => x.nome.toLowerCase() === j.nome.toLowerCase())) jogos.push(j);
     } catch (e) { fontes.push('steam:erro'); if (!erro) erro = 'Steam: ' + String(e.message || e).slice(0, 120); }
   }
-  return { jogos: jogos.slice(0, 10), erro, fontes };
+  return { jogos: jogos.slice(0, 20), erro, fontes };
 }
 async function buscarIgdb(q, env) {
   const busca = q.replace(/["\\]/g, ' ');
   const r = await fetch('https://api.igdb.com/v4/games', {
     method: 'POST', signal: AbortSignal.timeout(5000),
     headers: { 'Client-ID': env.IGDB_CLIENT_ID.trim(), Accept: 'application/json', Authorization: 'Bearer ' + await tokenTwitch(env), 'content-type': 'text/plain' },
-    body: `search "${busca}"; fields name, first_release_date, cover.image_id, platforms.abbreviation, version_parent; where version_parent = null; limit 10;`,
+    body: `search "${busca}"; fields name, first_release_date, cover.image_id, platforms.abbreviation, version_parent; where version_parent = null; limit 40;`,
   });
   if (r.status === 401 && !buscarIgdb._renovou) { buscarIgdb._renovou = true; await tokenTwitch(env, true); try { return await buscarIgdb(q, env); } finally { buscarIgdb._renovou = false; } }
   const j = await r.json();
   if (!Array.isArray(j)) throw new Error('IGDB respondeu: ' + JSON.stringify(j).slice(0, 160));
-  return j.slice(0, 10).map(g => ({
+  // o IGDB ordena por relevância do jeito dele: aqui o nome exato vem primeiro, depois os que começam com o que foi digitado
+  const alvo = q.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const norm = n => String(n || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const nota = g => { const n = norm(g.name); return n === alvo ? 0 : n.startsWith(alvo + ' ') || n.startsWith(alvo) ? 1 : n.includes(alvo) ? 2 : 3; };
+  const ordenados = j.map((g, i) => ({ g, i, n: nota(g) })).sort((a, b) => a.n - b.n || a.i - b.i).map(x => x.g);
+  return ordenados.slice(0, 20).map(g => ({
     nome: g.name,
     capa: g.cover && g.cover.image_id ? `https://images.igdb.com/igdb/image/upload/t_cover_small/${g.cover.image_id}.jpg` : null,
     info: [g.first_release_date ? new Date(g.first_release_date * 1000).getUTCFullYear() : null, (g.platforms || []).map(p => p.abbreviation).filter(Boolean).slice(0, 4).join(', ')].filter(Boolean).join(' · '),
