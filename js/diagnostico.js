@@ -74,8 +74,6 @@ async function resumoLigacao(pc) {
 }
 
 // --- qualidade do vídeo: duas leituras com 2 s de intervalo para medir o que está passando agora ---
-const MOTIVO = { bandwidth: 'INTERNET (upload não dá conta)', cpu: 'PROCESSADOR (codificação pesada)', other: 'outro motivo', none: 'nada' };
-const mbps = bps => (bps / 1e6).toFixed(1) + ' Mbps';
 async function medirVideo(pcs) {
   const ler = () => Promise.all(pcs.map(pc => pc ? pc.getStats().catch(() => null) : null));
   const a = await ler(); await new Promise(r => setTimeout(r, 2000)); const b = await ler();
@@ -116,31 +114,43 @@ function videoChegando({ a, b }) {
     decoder: i2.decoderImplementation || '?'
   };
 }
-const linhaSaida = (quem, v) => !v ? `${quem}: sem vídeo saindo` :
-  `${quem}: ${v.w || '?'}×${v.h || '?'} a ${Math.round(v.fps || 0)} fps · ${mbps(v.taxa)}` +
-  (v.disponivel ? ` (cabe ~${mbps(v.disponivel)})` : '') +
-  ` · limitado por: ${MOTIVO[v.motivo] || v.motivo}` +
-  (v.pctBanda || v.pctCpu ? ` · desde o início: ${v.pctBanda}% do tempo pela internet, ${v.pctCpu}% pelo processador` : '') +
-  (v.trocas ? ` · ${v.trocas} trocas de resolução` : '') +
-  (v.perda != null ? ` · perda ${(v.perda * 100).toFixed(1)}%` : '');
-const linhaChegada = (quem, v) => !v ? `${quem}: sem vídeo chegando` :
-  `${quem}: ${v.w || '?'}×${v.h || '?'} a ${Math.round(v.fps || 0)} fps · ${mbps(v.taxa)} · perda ${(v.perda * 100).toFixed(1)}%` +
-  (v.descartados ? ` · ${v.descartados} quadros descartados em 2 s` : '') + (v.congelou ? ` · congelou ${v.congelou}×` : '') +
-  ` · decodificador: ${v.decoder}`;
-
+const num = (x, d = 1) => Number(x).toFixed(d).replace('.', ',');
+const mb = bps => num(bps / 1e6) + ' Mbps';
+const LIMITE_CURTO = { bandwidth: '⚠️ internet', cpu: '⚠️ processador', other: 'outro', none: 'nenhum' };
+const imgDe = v => `${v.w || '?'}×${v.h || '?'} · ${Math.round(v.fps || 0)} fps`;
+// uma linha por pessoa; os detalhes só aparecem quando dizem algo
+function blocoSaida(quem, v) {
+  if (!v) return [`  • ${quem}: sem vídeo saindo`];
+  const r = [`  • ${quem}: ${imgDe(v)} · ${mb(v.taxa)} · limite: ${LIMITE_CURTO[v.motivo] || v.motivo}`];
+  const det = [];
+  if (v.disponivel && (v.motivo === 'bandwidth' || v.pctBanda >= 5)) det.push(`cabe ~${mb(v.disponivel)}`);
+  if (v.pctBanda >= 5) det.push(`internet limitou ${v.pctBanda}% do tempo`);
+  if (v.pctCpu >= 5) det.push(`processador limitou ${v.pctCpu}% do tempo`);
+  if (v.trocas) det.push(`trocou de resolução ${v.trocas}×`);
+  if (v.perda) det.push(`perda ${num(v.perda * 100)}%`);
+  if (det.length) r.push('      ' + det.join(' · '));
+  return r;
+}
+function blocoChegada(quem, v) {
+  if (!v) return [`  • ${quem}: sem vídeo chegando`];
+  const r = [`  • ${quem}: ${imgDe(v)} · ${mb(v.taxa)} · perda ${num(v.perda * 100)}%`];
+  const det = [];
+  if (v.descartados) det.push(`${v.descartados} quadros descartados`);
+  if (v.congelou) det.push(`congelou ${v.congelou}×`);
+  if (det.length) r.push('      ' + det.join(' · '));
+  return r;
+}
 // conclusão em linguagem simples
 function avaliarTransmissao(saidas) {
   const vs = saidas.filter(Boolean); if (!vs.length) return [];
-  const n = vs.length, total = vs.reduce((x, v) => x + v.taxa, 0);
-  const banda = vs.filter(v => v.motivo === 'bandwidth').length, cpu = vs.filter(v => v.motivo === 'cpu').length;
-  const muitaBanda = vs.filter(v => v.pctBanda >= 20).length, muitaCpu = vs.filter(v => v.pctCpu >= 20).length;
-  const hw = vs.some(v => v.hw === true), sw = /libvpx|openh264|libaom|dav1d/i.test(vs[0].encoder);
+  const n = vs.length;
+  const banda = vs.filter(v => v.motivo === 'bandwidth' || v.pctBanda >= 20).length;
+  const cpu = vs.filter(v => v.motivo === 'cpu' || v.pctCpu >= 20).length;
+  const sw = /libvpx|openh264|libaom|dav1d/i.test(vs[0].encoder);
   const r = [];
-  r.push(`Enviando ${mbps(total)} no total para ${n} pessoa${n > 1 ? 's' : ''} (limite: ${(Number(qual) / 1000)} Mbps por pessoa = até ${Number(qual) * n / 1000} Mbps).`);
-  r.push(`Codificador: ${vs[0].codec} · ${vs[0].encoder}${hw ? ' (placa de vídeo)' : sw ? ' (processador — mais pesado)' : ''}.`);
-  if (banda || muitaBanda) r.push(`⚠️ O upload não está dando conta${banda ? ` agora (${banda} de ${n})` : ` em boa parte do tempo (${muitaBanda} de ${n})`}: a qualidade cai e sobe conforme a internet aperta. Baixar a Qualidade para ${Number(qual) > 3000 ? '3 Mbps' : 'menos'} ou a resolução deve estabilizar.`);
-  if (cpu || muitaCpu) r.push(`⚠️ O processador não está dando conta de codificar ${n} vezes${sw ? ' (está codificando sem a placa de vídeo)' : ''}. Baixar a resolução ou o fps deve estabilizar.`);
-  if (!banda && !cpu && !muitaBanda && !muitaCpu) r.push('✅ Nenhum limite apareceu do lado de quem transmite. Se a qualidade varia, o problema está na internet de quem assiste.');
+  if (banda) r.push(`  ⚠️ O upload não dá conta (${banda} de ${n} pessoas). Baixe a Qualidade${Number(qual) > 3000 ? ' para 3 Mbps' : ''} ou a resolução.`);
+  if (cpu) r.push(`  ⚠️ O processador não dá conta de codificar ${n} vezes${sw ? ' (está sem a placa de vídeo)' : ''}. Baixe a resolução ou o fps.`);
+  if (!r.length) r.push('  ✅ Nada limitando do lado de quem transmite. Se a qualidade varia, é a internet de quem assiste.');
   return r;
 }
 const nomeDe = id => { const m = membros.find(x => x.id === id); return m ? m.nome : id.slice(0, 8); };
@@ -174,17 +184,30 @@ async function gerarDiagnostico() {
   for (const [id, v] of vozes) { alguma = true; L(`Voz com ${nomeDe(id)}: ${await resumoLigacao(v.call && v.call.peerConnection)}`); }
   if (!alguma) L('nenhuma (não estou assistindo, transmitindo nem na voz)');
   if (assistentes.size || assistindo.size) {
-    L('');
-    L('— Qualidade do vídeo (medida em 2 s) —');
     const envio = [...assistentes.entries()], receb = [...assistindo.entries()];
     const med = await medirVideo([...envio.map(([, a]) => a.call && a.call.peerConnection), ...receb.map(([, it]) => it.call && it.call.peerConnection)]);
     if (envio.length) {
-      L(`Minha transmissão: ${fonte || '?'} · pedido ${resol}p a ${fps} fps · prioridade ${prio} · qualidade ${Number(qual) / 1000} Mbps por pessoa`);
       const saidas = envio.map((e, i) => videoSaindo(med[i]));
-      envio.forEach(([id], i) => L(`  Para ${linhaSaida(nomeDe(id), saidas[i])}`));
-      for (const x of avaliarTransmissao(saidas)) L(x);
+      const vs = saidas.filter(Boolean), q = Number(qual) / 1000, n = envio.length;
+      const hw = vs.some(v => v.hw === true), sw = vs.length && /libvpx|openh264|libaom|dav1d/i.test(vs[0].encoder);
+      L('');
+      L('— Minha transmissão —');
+      L(`  Fonte: ${TITULOS[fonte] || fonte || '?'} · ${resol}p · ${fps} fps · prioridade ${prio}`);
+      L(`  Qualidade: ${num(q, 0)} Mbps por pessoa × ${n} = até ${num(q * n, 0)} Mbps de upload`);
+      L(`  Enviando agora: ${mb(vs.reduce((x, v) => x + v.taxa, 0))} no total`);
+      if (vs.length) L(`  Codificador: ${vs[0].codec} · ${hw ? 'placa de vídeo' : sw ? 'processador (mais pesado)' : vs[0].encoder}`);
+      L('');
+      L('  Para cada pessoa:');
+      envio.forEach(([id], i) => blocoSaida(nomeDe(id), saidas[i]).forEach(x => L(x)));
+      L('');
+      L('  Conclusão:');
+      avaliarTransmissao(saidas).forEach(x => L(x));
     }
-    receb.forEach(([id], i) => L(`Vendo ${linhaChegada(nomeDe(id), videoChegando(med[envio.length + i]))}`));
+    if (receb.length) {
+      L('');
+      L('— O que estou assistindo —');
+      receb.forEach(([id], i) => blocoChegada(nomeDe(id), videoChegando(med[envio.length + i])).forEach(x => L(x)));
+    }
   }
   L('');
   L('— Registro de conexão —');
