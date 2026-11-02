@@ -86,3 +86,41 @@ $('admDefinirSenha').onclick = async () => {
   toast('🔒 Senha da sala definida. Passe para quem você quiser que entre.');
 };
 $('admRemoverSenha').onclick = () => acaoAdmin('senha', null, { hash: null });
+
+/* ---- 🩺 diagnóstico de outra pessoa ---- */
+// o admin pede; o navegador da pessoa gera o diagnóstico (avisando ela) e manda só para esse admin
+const diagEsperando = new Map();   // id → hora do pedido
+function pedirDiagnostico(m) {
+  acaoAdmin('diagnostico', m.id);
+  diagEsperando.set(m.id, Date.now());
+  toast(`🩺 Pedi o diagnóstico de <b>${esc(m.nome)}</b>. Leva uns 15 segundos.`);
+  setTimeout(() => {
+    if (!diagEsperando.has(m.id)) return;
+    diagEsperando.delete(m.id);
+    const v = (membros.find(x => x.id === m.id) || {}).versao || 0;
+    toast(`🩺 ${esc(m.nome)} não respondeu.` + (v < 39 ? ' A Midori dessa pessoa está desatualizada: peça um Ctrl+F5.' : ''), 'aviso', 8000);
+  }, 40000);
+}
+let gerandoParaAdmin = false;
+async function responderDiagnostico(d) {
+  if (gerandoParaAdmin || !hubConn || !hubConn.open) return;
+  gerandoParaAdmin = true;
+  toast(`🩺 <b>${esc(d.porNome || 'Um admin')}</b> pediu o seu diagnóstico de conexão. Ele vai só para essa pessoa e não inclui o seu IP.`, '', 7000);
+  let texto;
+  try { texto = await gerarDiagnostico(); } catch (e) { texto = 'O diagnóstico falhou: ' + (e.message || e); }
+  gerandoParaAdmin = false;
+  try { hubConn.send({ tipo: 'diagnostico', para: d.por, texto }); } catch (e) {}
+}
+function mostrarDiagnosticoDe(d) {
+  diagEsperando.delete(d.id);
+  $('diagTitulo').textContent = `🩺 Diagnóstico de ${d.nome}`;
+  $('diagTexto').value = d.texto;
+  $('telaDiag').classList.remove('oculto');
+  $('diagTexto').scrollTop = 0;
+}
+$('diagCopiar').onclick = () => {
+  navigator.clipboard.writeText($('diagTexto').value).then(() => toast('Diagnóstico copiado. É só colar.'),
+    () => { $('diagTexto').select(); toast('Não deu para copiar sozinho: o texto ficou selecionado, use Ctrl+C.', 'aviso'); });
+};
+$('diagFechar').onclick = () => $('telaDiag').classList.add('oculto');
+$('telaDiag').onclick = e => { if (e.target === $('telaDiag')) $('diagFechar').click(); };

@@ -252,6 +252,9 @@ function virarHub() {
           alvo.silenciado = sim; if (sim) alvo.mudo = true;
           registrar(sim ? `${adm.nome} silenciou ${alvo.nome} na voz` : `${adm.nome} liberou o microfone de ${alvo.nome}`, null, null, 'nome', alvo.id);
           try { ca && ca.send({ tipo: 'silenciar', valor: sim }); } catch (e) {}
+        } else if (d.acao === 'diagnostico') {
+          try { ca && ca.send({ tipo: 'pedeDiagnostico', por: adm.id, porNome: adm.nome }); } catch (e) {}
+          return;   // não muda nada na sala
         } else if (d.acao === 'parar') {
           registrar(`${adm.nome} encerrou a transmissão de ${alvo.nome}`, null, null, 'nome', alvo.id);
           try { ca && ca.send({ tipo: 'parar' }); } catch (e) {}        } else if (d.acao === 'jogo') {
@@ -267,6 +270,11 @@ function virarHub() {
           try { ca && ca.send({ tipo: 'jogoPeloAdmin', jogo, capa, por: adm.nome }); } catch (e) {}
         }
         difundir();
+      } else if (d.tipo === 'diagnostico') {
+        const m = roster.get(c.peer), adm = roster.get(d.para);
+        if (!m || !adm || !adm.admin) return;
+        const ca = conns.get(adm.id);
+        try { ca && ca.open && ca.send({ tipo: 'diagnosticoDe', id: m.id, nome: m.nome, texto: String(d.texto || '').slice(0, 30000) }); } catch (e) {}
       } else if (d.tipo === 'risco') {
         const m = roster.get(c.peer); if (!m || !roster.has(d.alvo) || !Array.isArray(d.pts)) return;
         const pts = d.pts.slice(0, 60).filter(p => Array.isArray(p) && p.length === 2 && p.every(n => typeof n === 'number' && n >= -0.1 && n <= 1.1));
@@ -358,6 +366,8 @@ function conectarHub() {
     else if (d.tipo === 'silenciar') { aplicarSilencio(!!d.valor); }
     else if (d.tipo === 'jogoRecusado') { toast(`🎮 <b>${esc(d.jogo)}</b> não está no banco de jogos. Escolha um jogo da lista.`, 'aviso', 6000); if (jogoAtual === d.jogo) definirJogo({ nome: '', capa: null }); }
     else if (d.tipo === 'jogoPeloAdmin') { if (aoVivo) { definirJogo({ nome: d.jogo, capa: d.capa }); toast(`🛡️ ${esc(d.por)} mudou o seu jogo para <b>${esc(d.jogo || 'nenhum')}</b>.`, '', 6000); } }
+    else if (d.tipo === 'pedeDiagnostico') { responderDiagnostico(d); }
+    else if (d.tipo === 'diagnosticoDe') { mostrarDiagnosticoDe(d); }
     else if (d.tipo === 'parar') { if (aoVivo) { pararTransmissao(); toast('Um admin encerrou a sua transmissão.', 'aviso', 8000); } }
     else if (d.tipo === 'msg') addMsg(d);
     else if (d.tipo === 'historico') (d.msgs || []).forEach(x => addMsg(x, true));
@@ -446,6 +456,7 @@ function renderLista() {
         if (m.voz) item(m.silenciado ? '🎙️ Liberar o microfone' : '🔇 Silenciar na voz', () => acaoAdmin(m.silenciado ? 'liberar' : 'silenciar', m.id));
         if (m.live) item('🎮 Trocar o jogo', () => abrirJogoAdmin(m));
         if (m.live) item('⏹ Parar a transmissão', () => acaoAdmin('parar', m.id));
+        item('🩺 Pegar diagnóstico', () => pedirDiagnostico(m));
         item('🚫 Expulsar da sala', () => { if (confirm(`Expulsar ${m.nome} da sala?`)) acaoAdmin('expulsar', m.id); }, 'perigo');
         // flutua por cima de tudo, colado no botão ⋯; se não couber embaixo, abre para cima
         document.body.appendChild(menu);
