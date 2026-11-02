@@ -167,7 +167,7 @@ async function gerarDiagnostico() {
   L(`Endereço: ${OPCOES_PEER.host}`);
   L(`Teste agora: ${await testarServidor()}`);
   L(`Minha ligação: ${!peer ? 'não criada' : peer.destroyed ? 'destruída' : peer.disconnected ? 'CAÍDA' : peer.open ? 'aberta' : 'esperando o servidor'}` + (typeof tentativaServidor !== 'undefined' && tentativaServidor > 1 ? ` (tentativa ${tentativaServidor})` : ''));
-  L(`Organizador da sala: ${hubPeer && hubPeer.open ? 'sou eu' : 'outra pessoa'} · ligação com ele: ${hubConn ? (hubConn.open ? 'aberta' : 'tentando') : 'nenhuma'}`);
+  L(`Organizador da sala: ${hubPeer && hubPeer.open ? 'sou eu' : (typeof regrasSala !== 'undefined' && regrasSala.organizador ? `${regrasSala.organizador.nome} (v${regrasSala.organizador.versao})` : 'outra pessoa (versão antiga)')} · ligação com ele: ${hubConn ? (hubConn.open ? 'aberta' : 'tentando') : 'nenhuma'}`);
   if (hubConn && hubConn.peerConnection) L(`  ${await resumoLigacao(hubConn.peerConnection)}`);
   L('');
   L('— Minha rede —');

@@ -98,7 +98,11 @@ function pedirDiagnostico(m) {
     if (!diagEsperando.has(m.id)) return;
     diagEsperando.delete(m.id);
     const v = (membros.find(x => x.id === m.id) || {}).versao || 0;
-    toast(`🩺 ${esc(m.nome)} não respondeu.` + (v < 39 ? ' A Midori dessa pessoa está desatualizada: peça um Ctrl+F5.' : ''), 'aviso', 8000);
+    const org = regrasSala.organizador;   // quem organiza a sala; versões antigas não informam
+    let porque = '';
+    if (v < 39) porque = ` A Midori de ${esc(m.nome)} está desatualizada (v${v || '?'}): peça um Ctrl+F5.`;
+    else if (!org || org.versao < 39) porque = ` Quem organiza a sala${org ? ` (<b>${esc(org.nome)}</b>, v${org.versao})` : ''} está com a Midori antiga, e o pedido passa por essa pessoa. Peça um Ctrl+F5${org ? ' para ela' : ' para todo mundo'}.`;
+    toast(`🩺 ${esc(m.nome)} não respondeu.` + porque, 'aviso', 12000);
   }, 40000);
 }
 let gerandoParaAdmin = false;

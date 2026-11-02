@@ -100,7 +100,7 @@ function virarHub() {
   };
   const difundir = () => {
     const lista = [...roster.values()].map(({ cid: _c, _expulso, _did, _pedidos, _ultimaFig, _jogoPedido, ...m }) => m);
-    const regras = { banidos: [...banidos], nomesBanidos, silenciados: [...silenciados], senhaHash, autorizados: [...autorizados], adminsAvisados: [...adminsAvisados] };
+    const regras = { banidos: [...banidos], nomesBanidos, silenciados: [...silenciados], senhaHash, autorizados: [...autorizados], adminsAvisados: [...adminsAvisados], organizador: { nome, versao: VERSAO } };
     for (const c of conns.values()) if (c.open) try { c.send({ tipo: 'lista', membros: lista, regras }); } catch (e) {}
   };
   // só aparece jogo que existe no banco de jogos (nada de nome inventado)
