@@ -148,7 +148,11 @@ function avaliarTransmissao(saidas) {
   const cpu = vs.filter(v => v.motivo === 'cpu' || v.pctCpu >= 20).length;
   const sw = /libvpx|openh264|libaom|dav1d/i.test(vs[0].encoder);
   const r = [];
-  if (banda) r.push(`  ⚠️ O upload não dá conta (${banda} de ${n} pessoas). Baixe a Qualidade${Number(qual) > 3000 ? ' para 3 Mbps' : ''} ou a resolução.`);
+  const cabe = vs.reduce((x, v) => x + (v.disponivel || 0), 0), pedido = Number(qual) * 1000 * n;
+  if (banda && cabe && cabe < pedido * 0.3)
+    r.push(`  ⚠️ A internet só está deixando sair ~${mb(cabe)} no total, muito menos que os ${mb(pedido)} pedidos. Baixar a Qualidade não resolve: o upload está fraco ou ocupado. Faça um teste de velocidade (olhe o UPLOAD), prefira cabo ao Wi-Fi e feche o que estiver enviando coisas (OneDrive/Google Drive sincronizando, torrent, outra live).`);
+  else if (banda) r.push(`  ⚠️ O upload não dá conta (${banda} de ${n} pessoas). Baixe a Qualidade${Number(qual) > 3000 ? ' para 3 Mbps' : ''} ou a resolução.`);
+  if (sw && !cpu) r.push('  ℹ️ O vídeo está sendo codificado pelo processador, não pela placa de vídeo. Vale ligar no Chrome: Configurações → Sistema → "Usar aceleração gráfica quando disponível".');
   if (cpu) r.push(`  ⚠️ O processador não dá conta de codificar ${n} vezes${sw ? ' (está sem a placa de vídeo)' : ''}. Baixe a resolução ou o fps.`);
   if (!r.length) r.push('  ✅ Nada limitando do lado de quem transmite. Se a qualidade varia, é a internet de quem assiste.');
   return r;
