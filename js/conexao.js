@@ -104,7 +104,7 @@ async function iniciarConexao() {
     }
     if (e.type !== 'peer-unavailable') anotarConexao(`❗ Erro de conexão: ${e.type}`);
   });
-  peer.on('disconnected', () => { if (peer !== estePeer || estePeer.destroyed) return; anotarConexao('📡 Você caiu do servidor da Midori (as telas e a voz continuam); reconectando'); setTimeout(() => { try { peer.reconnect(); } catch (e) {} }, 2000); });
+  peer.on('disconnected', () => { if (peer !== estePeer || estePeer.destroyed) return; anotarConexao('📡 Você caiu do servidor da Midori (as telas e a voz continuam); reconectando'); inicioTentativa = Date.now(); setTimeout(() => { try { peer.reconnect(); } catch (e) {} }, 2000); });
   if (saidaLigada) return; saidaLigada = true;
   window.addEventListener('beforeunload', () => { if (avisoDoHub) avisoDoHub(`${nome} saiu da sala`, null, null, 'saiu', euId); saindo = true; try { hubConn && hubConn.open && hubConn.send({ tipo: 'tchau' }); } catch (e) {} try { peer.destroy(); } catch (e) {} try { hubPeer && hubPeer.destroy(); } catch (e) {} });
 }
