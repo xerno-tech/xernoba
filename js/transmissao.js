@@ -149,11 +149,50 @@ async function aplicarBitrate(call) {
 function enviarPara(id) {
   const a = assistentes.get(id); if (!a || !stream) return;
   if (a.call) try { a.call.close(); } catch (e) {}
-  const call = peer.call(id, stream, { sdpTransform: sdpTransmissao, metadata: { tipo: 'video' } });
+  const call = peer.call(id, stream, { sdpTransform: sdpTransmissao, metadata: { tipo: 'video', codec: codecTransmissao } });
   a.call = call;
   const pc = call.peerConnection;
-  if (pc) pc.addEventListener('connectionstatechange', () => { if (pc.connectionState === 'connected') aplicarBitrate(call); });
+  if (pc) pc.addEventListener('connectionstatechange', () => {
+    if (pc.connectionState === 'connected') { aplicarBitrate(call); setTimeout(() => conferirCodificador(pc), 8000); }
+    // ligação que falhou e não voltou: larga, para não ficar ocupando upload nem contando como "assistindo"
+    // (quem assiste reabre a tela sozinho, com uma ligação nova)
+    else if (pc.connectionState === 'failed') setTimeout(() => {
+      if (pc.connectionState !== 'failed' || assistentes.get(id) !== a || a.call !== call) return;
+      anotarConexao(`🧹 A ligação com ${nomeDe(id)} (que assistia você) falhou e foi encerrada`);
+      largarAssistente(id);
+    }, 10000);
+  });
 }
+// avisa uma vez se o vídeo está saindo pelo processador (pesado: um encode por pessoa assistindo)
+let avisouCodificador = false;
+async function conferirCodificador(pc) {
+  if (avisouCodificador || !aoVivo || pc.connectionState !== 'connected') return;
+  try {
+    const st = await pc.getStats(); let o = null;
+    st.forEach(r => { if (!o && r.type === 'outbound-rtp' && r.kind === 'video') o = r; });
+    if (!o || !o.encoderImplementation || o.powerEfficientEncoder === true) return;
+    if (!/libvpx|openh264|libaom|dav1d/i.test(o.encoderImplementation)) return;
+    avisouCodificador = true;
+    anotarConexao('🐢 O vídeo está sendo codificado pelo processador, não pela placa de vídeo');
+    toast('🐢 Seu vídeo está saindo pelo <b>processador</b>, não pela placa de vídeo, e pode travar com várias pessoas assistindo.<br>No Chrome: Configurações → Sistema → ligue <b>"Usar aceleração gráfica quando disponível"</b> e reinicie o Chrome.', 'aviso', 15000);
+  } catch (e) {}
+}
+function largarAssistente(id) {
+  const a = assistentes.get(id); if (!a) return;
+  assistentes.delete(id);
+  try { a.call && a.call.close(); } catch (e) {}
+  try { a.conn && a.conn.close(); } catch (e) {}
+  if (aoVivo) atualizarAoVivo();
+}
+// quem saiu da sala (ou voltou com outro código) e deixou a ligação pendurada
+setInterval(() => {
+  if (!hubConn || !hubConn.open || !membros.length) return;
+  for (const id of [...assistentes.keys()]) if (!membros.some(m => m.id === id)) {
+    const a = assistentes.get(id);
+    a._sumiu = (a._sumiu || 0) + 1;
+    if (a._sumiu >= 2) { anotarConexao(`🧹 Encerrada a ligação de quem assistia você e já saiu da sala (${id.slice(0, 8)})`); largarAssistente(id); }
+  } else assistentes.get(id)._sumiu = 0;
+}, 15000);
 function atualizarAoVivo() {
   document.body.classList.toggle('aoVivoAgora', aoVivo);
   $('aoVivoBox').classList.toggle('oculto', !aoVivo);

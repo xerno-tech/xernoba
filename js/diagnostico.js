@@ -89,6 +89,7 @@ function videoSaindo({ a, b }) {
   const par = achar(b, r => r.type === 'candidate-pair' && r.nominated && r.state === 'succeeded');
   const remoto = achar(b, r => r.type === 'remote-inbound-rtp' && r.kind === 'video');
   const codec = o2.codecId && b.get(o2.codecId);
+  const fonteV = (o2.mediaSourceId && b.get(o2.mediaSourceId)) || achar(b, r => r.type === 'media-source' && r.kind === 'video');
   const dur = o2.qualityLimitationDurations || {};
   const tot = Object.values(dur).reduce((x, y) => x + y, 0) || 1;
   const pct = k => Math.round((dur[k] || 0) / tot * 100);
@@ -98,7 +99,8 @@ function videoSaindo({ a, b }) {
     pctBanda: pct('bandwidth'), pctCpu: pct('cpu'),
     encoder: o2.encoderImplementation || '?', hw: o2.powerEfficientEncoder,
     codec: codec ? codec.mimeType.replace('video/', '') : '?',
-    disponivel: par && par.availableOutgoingBitrate, perda: remoto && remoto.fractionLost
+    disponivel: par && par.availableOutgoingBitrate, perda: remoto && remoto.fractionLost,
+    fpsFonte: fonteV && fonteV.framesPerSecond
   };
 }
 function videoChegando({ a, b }) {
@@ -121,6 +123,7 @@ const imgDe = v => `${v.w || '?'}×${v.h || '?'} · ${Math.round(v.fps || 0)} fp
 // uma linha por pessoa; os detalhes só aparecem quando dizem algo
 function blocoSaida(quem, v) {
   if (!v) return [`  • ${quem}: sem vídeo saindo`];
+  if (!v.ligada) return [`  • ${quem}: ligação ${v.estado || 'caída'} — não entra na conta (é encerrada sozinha em ~10 s)`];
   const r = [`  • ${quem}: ${imgDe(v)} · ${mb(v.taxa)} · limite: ${LIMITE_CURTO[v.motivo] || v.motivo}`];
   const det = [];
   if (v.disponivel && (v.motivo === 'bandwidth' || v.pctBanda >= 5)) det.push(`cabe ~${mb(v.disponivel)}`);
@@ -142,7 +145,7 @@ function blocoChegada(quem, v) {
 }
 // conclusão em linguagem simples
 function avaliarTransmissao(saidas) {
-  const vs = saidas.filter(Boolean); if (!vs.length) return [];
+  const vs = saidas.filter(v => v && v.ligada); if (!vs.length) return [];
   const n = vs.length;
   const banda = vs.filter(v => v.motivo === 'bandwidth' || v.pctBanda >= 20).length;
   const cpu = vs.filter(v => v.motivo === 'cpu' || v.pctCpu >= 20).length;
@@ -152,8 +155,14 @@ function avaliarTransmissao(saidas) {
   if (banda && cabe && cabe < pedido * 0.3)
     r.push(`  ⚠️ A internet só está deixando sair ~${mb(cabe)} no total, muito menos que os ${mb(pedido)} pedidos. Baixar a Qualidade não resolve: o upload está fraco ou ocupado. Faça um teste de velocidade (olhe o UPLOAD), prefira cabo ao Wi-Fi e feche o que estiver enviando coisas (OneDrive/Google Drive sincronizando, torrent, outra live).`);
   else if (banda) r.push(`  ⚠️ O upload não dá conta (${banda} de ${n} pessoas). Baixe a Qualidade${Number(qual) > 3000 ? ' para 3 Mbps' : ''} ou a resolução.`);
-  if (sw && !cpu) r.push('  ℹ️ O vídeo está sendo codificado pelo processador, não pela placa de vídeo. Vale ligar no Chrome: Configurações → Sistema → "Usar aceleração gráfica quando disponível".');
+  if (sw && !cpu) r.push(codecNaPlaca === false
+    ? '  ℹ️ O vídeo está sendo codificado pelo processador: o Chrome diz que nenhum formato vai pela placa de vídeo. Ligue no Chrome: Configurações → Sistema → "Usar aceleração gráfica quando disponível", reinicie o Chrome e, se continuar, atualize o driver da placa de vídeo (em chrome://gpu, "Video Encode" tem que dizer "Hardware accelerated").'
+    : '  ℹ️ O vídeo está sendo codificado pelo processador, não pela placa de vídeo. Vale ligar no Chrome: Configurações → Sistema → "Usar aceleração gráfica quando disponível".');
   if (cpu) r.push(`  ⚠️ O processador não dá conta de codificar ${n} vezes${sw ? ' (está sem a placa de vídeo)' : ''}. Baixe a resolução ou o fps.`);
+  // a captura entrega poucos quadros: não é internet nem codificação, é a fonte
+  const fpsFonte = Math.max(0, ...vs.map(v => v.fpsFonte || 0));
+  if (fpsFonte && fpsFonte < Number(fps) * 0.6 && !cpu)
+    r.push(`  ⚠️ A captura só está entregando ~${Math.round(fpsFonte)} fps (pedido: ${fps}). Não é a internet: é a captura. Ligue a aceleração gráfica do Chrome, deixe o jogo em "janela sem borda" (tela cheia exclusiva trava a captura) e não minimize o jogo.`);
   if (!r.length) r.push('  ✅ Nada limitando do lado de quem transmite. Se a qualidade varia, é a internet de quem assiste.');
   return r;
 }
@@ -191,15 +200,23 @@ async function gerarDiagnostico() {
     const envio = [...assistentes.entries()], receb = [...assistindo.entries()];
     const med = await medirVideo([...envio.map(([, a]) => a.call && a.call.peerConnection), ...receb.map(([, it]) => it.call && it.call.peerConnection)]);
     if (envio.length) {
-      const saidas = envio.map((e, i) => videoSaindo(med[i]));
-      const vs = saidas.filter(Boolean), q = Number(qual) / 1000, n = envio.length;
+      const saidas = envio.map(([, a], i) => {
+        const v = videoSaindo(med[i]); if (!v) return null;
+        const pc = a.call && a.call.peerConnection;
+        v.estado = pc ? pc.connectionState : 'sem ligação'; v.ligada = v.estado === 'connected';
+        return v;
+      });
+      const vs = saidas.filter(v => v && v.ligada), q = Number(qual) / 1000, n = vs.length;
       const hw = vs.some(v => v.hw === true), sw = vs.length && /libvpx|openh264|libaom|dav1d/i.test(vs[0].encoder);
       L('');
       L('— Minha transmissão —');
       L(`  Fonte: ${TITULOS[fonte] || fonte || '?'} · ${resol}p · ${fps} fps · prioridade ${prio}`);
       L(`  Qualidade: ${num(q, 0)} Mbps por pessoa × ${n} = até ${num(q * n, 0)} Mbps de upload`);
       L(`  Enviando agora: ${mb(vs.reduce((x, v) => x + v.taxa, 0))} no total`);
-      if (vs.length) L(`  Codificador: ${vs[0].codec} · ${hw ? 'placa de vídeo' : sw ? 'processador (mais pesado)' : vs[0].encoder}`);
+      if (vs.length) L(`  Codificador: ${vs[0].codec} · ${hw ? 'placa de vídeo' : sw ? 'processador (mais pesado)' : vs[0].encoder}`
+        + (codecNaPlaca === false ? ' · o Chrome diz que nenhum formato vai pela placa' : codecNaPlaca ? ` · pela placa: ${codecNaPlaca}` : ''));
+      const fpsFonte = Math.max(0, ...vs.map(v => v.fpsFonte || 0));
+      if (fpsFonte) L(`  Captura: entregando ${Math.round(fpsFonte)} fps`);
       L('');
       L('  Para cada pessoa:');
       envio.forEach(([id], i) => blocoSaida(nomeDe(id), saidas[i]).forEach(x => L(x)));

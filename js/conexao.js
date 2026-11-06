@@ -7,7 +7,24 @@ function entrar(n, s) {
   document.body.classList.add('naSala');
   $('txtSala').textContent = '# ' + sala;
   document.title = 'Midori Xernoba · ' + sala;
+  avisarOutrasAbas();
   iniciarConexao();
+}
+// a mesma pessoa com a sala aberta em duas abas: a mais nova fica, a antiga se desliga sozinha
+let canalAbas = null;
+function avisarOutrasAbas() {
+  if (!('BroadcastChannel' in window)) return;
+  try {
+    canalAbas = new BroadcastChannel('midori-abas');
+    canalAbas.onmessage = e => {
+      const d = e.data || {};
+      if (d.tipo === 'entrei' && d.sala === sala && !bloqueado && !saindo) {
+        anotarConexao('📑 Esta sala foi aberta em outra aba ou janela; esta foi desligada');
+        bloquear('outraAba');
+      }
+    };
+    canalAbas.postMessage({ tipo: 'entrei', sala });
+  } catch (e) {}
 }
 
 // o servidor grátis do PeerJS às vezes demora minutos para responder, sem dar erro:
@@ -64,7 +81,7 @@ async function iniciarConexao() {
     }
     const it = assistindo.get(call.peer);
     if (!it) { try { call.close(); } catch (e) {} return; }
-    call.answer(undefined, { sdpTransform: sdpTransmissao });
+    call.answer(undefined, { sdpTransform: sdpAssistir(call.metadata && call.metadata.codec) });
     if (it.call && it.call !== call) try { it.call.close(); } catch (e) {}
     it.call = call;
     const v = it.tela.querySelector('video');

@@ -191,7 +191,11 @@ function virarHub() {
           let mesma = false;
           for (const [oid, om] of roster) if (oid !== c.peer && ccid && om.cid === ccid) {
             mesma = true; om._expulso = true;
-            const oc = conns.get(oid); try { oc && oc.close(); } catch (e) {}
+            const oc = conns.get(oid);
+            // se a outra ainda estiver viva, é uma segunda aba da mesma pessoa: ela para de tentar voltar
+            // (sem isso as duas ficam se derrubando a cada 2–3 s)
+            try { oc && oc.open && oc.send({ tipo: 'outraAba' }); } catch (e) {}
+            setTimeout(() => { try { oc && oc.close(); } catch (e) {} }, 300);
             conns.delete(oid); vistoEm.delete(oid); roster.delete(oid);
           }
           if (pendentes.has(ccid)) { clearTimeout(pendentes.get(ccid)); pendentes.delete(ccid); mesma = true; }   // voltou da queda
@@ -361,6 +365,7 @@ function conectarHub() {
     else if (d.tipo === 'pedidoJogo') { receberPedidoJogo(d); }
     else if (d.tipo === 'risco') { receberRisco(d); }
     else if (d.tipo === 'expulso') { bloquear('expulso'); }
+    else if (d.tipo === 'outraAba') { anotarConexao('📑 Esta sala foi aberta em outra aba ou janela; esta foi desligada'); bloquear('outraAba'); }
     else if (d.tipo === 'semLogin') { bloqueado = true; salvar('token', ''); salvar('erroLogin', 'sessao'); location.href = location.pathname; }
     else if (d.tipo === 'pedeSenha') { bloquear('senha', d.errada); }
     else if (d.tipo === 'silenciar') { aplicarSilencio(!!d.valor); }

@@ -18,8 +18,12 @@ function bloquear(motivo, errada) {
     $('bloqTexto').textContent = errada ? 'Senha errada. Tente de novo.' : 'Esta sala tem senha. Digite para entrar.';
     $('bloqSenha').value = ''; setTimeout(() => $('bloqSenha').focus(), 50);
   } else {
-    $('bloqTitulo').textContent = '🚫 Você foi removido da sala';
-    $('bloqTexto').textContent = 'Um admin tirou você desta sala.';
+    $('bloqTitulo').textContent = motivo === 'outraAba' ? '📑 A Midori está aberta em outra aba' : '🚫 Você foi removido da sala';
+    $('bloqTexto').textContent = motivo === 'outraAba'
+      ? 'Você entrou nesta sala em outra aba ou janela, então esta aqui foi desligada (as duas juntas ficavam derrubando uma à outra). Para usar esta, recarregue a página.'
+      : 'Um admin tirou você desta sala.';
+    $('bloqVoltar2').textContent = motivo === 'outraAba' ? 'Usar esta aba' : 'Voltar ao início';
+    if (motivo === 'outraAba') $('bloqVoltar2').onclick = () => location.reload();
     if (aoVivo) pararTransmissao();
     if (emVoz) sairVoz();
     for (const id of [...assistindo.keys()]) pararDeAssistir(id);

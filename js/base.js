@@ -14,26 +14,46 @@ const salvar = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
 const ler = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
 const limpar = s => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 32);
 const sdpEstereo = sdp => sdp.replace(/useinbandfec=1/g, 'useinbandfec=1;stereo=1;sprop-stereo=1;maxaveragebitrate=192000');
-// Coloca o H.264 na frente da lista de formatos de vídeo: quase toda placa de vídeo comprime H.264 sozinha,
-// o que tira o peso do processador de quem transmite. Se um dos lados não tiver H.264, os outros formatos continuam na lista.
-function sdpH264(sdp) {
+// Formato de vídeo da transmissão: o primeiro que o Chrome desta pessoa comprime na PLACA DE VÍDEO.
+// O Chrome não deixa o site mandar usar a placa; o que dá é perguntar qual formato vai pela placa
+// (MediaCapabilities → powerEfficient) e colocar esse na frente da lista. Sem nenhum pela placa, fica o H.264,
+// que é o mais leve no processador.
+let codecTransmissao = 'H264', codecNaPlaca = null;   // null = ainda não sei; false = nenhum vai pela placa
+async function escolherCodec() {
+  const mc = navigator.mediaCapabilities;
+  if (!mc || !mc.encodingInfo) return;
+  const [w, h] = [1280, 720];
+  for (const c of ['H264', 'VP9', 'AV1', 'VP8']) {
+    try {
+      const r = await mc.encodingInfo({ type: 'webrtc', video: { contentType: 'video/' + c, width: w, height: h, bitrate: 6e6, framerate: 60 } });
+      if (r && r.supported && r.powerEfficient) { codecTransmissao = c; codecNaPlaca = c; return; }
+    } catch (e) {}
+  }
+  codecNaPlaca = false;
+}
+escolherCodec();
+// coloca o formato escolhido na frente; os outros continuam na lista, para quem não tiver esse
+function sdpCodec(sdp, codec) {
   const linhas = sdp.split('\r\n');
   const iM = linhas.findIndex(l => l.startsWith('m=video '));
   if (iM < 0) return sdp;
   let fim = linhas.findIndex((l, i) => i > iM && l.startsWith('m='));
   if (fim < 0) fim = linhas.length;
   const secao = linhas.slice(iM, fim).join('\n');
-  const h264 = [...secao.matchAll(/^a=rtpmap:(\d+) H264\/90000/gm)].map(m => m[1]);
-  if (!h264.length) return sdp;
-  const nota = pt => { const f = (secao.match(new RegExp(`^a=fmtp:${pt} (.*)$`, 'm')) || [])[1] || '';
-    return (/packetization-mode=1/.test(f) ? 0 : 2) + (/profile-level-id=42e0/.test(f) ? 0 : 1); };   // o mais compatível primeiro
-  h264.sort((a, b) => nota(a) - nota(b));
+  const pts = [...secao.matchAll(new RegExp(`^a=rtpmap:(\\d+) ${codec}/90000`, 'gm'))].map(m => m[1]);
+  if (!pts.length) return sdp;
+  if (codec === 'H264') {
+    const nota = pt => { const f = (secao.match(new RegExp(`^a=fmtp:${pt} (.*)$`, 'm')) || [])[1] || '';
+      return (/packetization-mode=1/.test(f) ? 0 : 2) + (/profile-level-id=42e0/.test(f) ? 0 : 1); };   // o mais compatível primeiro
+    pts.sort((a, b) => nota(a) - nota(b));
+  }
   const partes = linhas[iM].split(' ');
-  const pts = partes.slice(3);
-  linhas[iM] = [...partes.slice(0, 3), ...h264, ...pts.filter(p => !h264.includes(p))].join(' ');
+  linhas[iM] = [...partes.slice(0, 3), ...pts, ...partes.slice(3).filter(p => !pts.includes(p))].join(' ');
   return linhas.join('\r\n');
 }
-const sdpTransmissao = sdp => sdpH264(sdpEstereo(sdp));
+// quem transmite usa o formato dele; quem assiste responde com o formato que veio no pedido de quem transmite
+const sdpTransmissao = sdp => sdpCodec(sdpEstereo(sdp), codecTransmissao);
+const sdpAssistir = codec => sdp => sdpCodec(sdpEstereo(sdp), /^(H264|VP8|VP9|AV1)$/.test(codec || '') ? codec : 'H264');
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 const corDe = s => { let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) % 360; return `hsl(${h} 55% 45%)`; };
 
