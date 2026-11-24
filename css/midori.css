@@ -96,7 +96,7 @@ body.semChat #chat { display:none; }
 body.semChat #areaLista { max-height:none; flex:1; }
 .avatar.emoji { font-size:17px; }
 .avatar.foto { background-size:cover !important; background-position:center !important; color:transparent; }
-.painelInfo { position:absolute; left:10px; bottom:56px; z-index:4; background:rgba(var(--fundoRGB),.82); border:1px solid rgba(255,255,255,.12); border-radius:10px;
+.painelInfo { position:absolute; left:calc(var(--imgX,0px) + 10px); bottom:calc(var(--imgY,0px) + 56px); z-index:4; background:rgba(var(--fundoRGB),.82); border:1px solid rgba(255,255,255,.12); border-radius:10px;
               padding:8px 10px; font-size:12px; line-height:1.55; font-variant-numeric:tabular-nums; min-width:190px; pointer-events:none; }
 .painelInfo .lin { display:flex; justify-content:space-between; gap:14px; }
 .painelInfo .lin span:first-child { color:var(--mut); }
@@ -127,13 +127,13 @@ body.semChat #areaLista { max-height:none; flex:1; }
 .tela .ctrl { z-index:4; }   /* botões sempre por cima do desenho */
 .tela.desenhando .ctrl { opacity:1; }
 .tela [data-a=lapis].ativo { background:var(--acc) !important; border-color:var(--acc) !important; }
-.falantes { position:absolute; top:10px; left:10px; z-index:2; display:flex; flex-wrap:wrap; gap:6px; max-width:60%; pointer-events:none; }
-.tela:has(.selo) .falantes { top:38px; }
+.falantes { position:absolute; top:calc(var(--imgY,0px) + 10px); left:calc(var(--imgX,0px) + 10px); z-index:2; display:flex; flex-wrap:wrap; gap:6px; max-width:60%; pointer-events:none; }
+.tela:has(.selo) .falantes { top:calc(var(--imgY,0px) + 38px); }
 .falante { display:flex; align-items:center; gap:6px; background:rgba(var(--fundoRGB),.75); border:1px solid var(--ok); border-radius:999px; padding:3px 10px 3px 3px; font-size:12px; }
 .falante .avatar { width:22px; height:22px; font-size:11px; box-shadow:0 0 0 2px var(--ok); }
 .falante .avatar.emoji { font-size:13px; }
 #faixaMini .falantes, body.limpo .falantes { display:none; }
-.reacoes { position:absolute; top:10px; right:10px; display:flex; gap:4px; opacity:0; transition:opacity .2s; z-index:4; }
+.reacoes { position:absolute; top:calc(var(--imgY,0px) + 10px); right:calc(var(--imgX,0px) + 10px); display:flex; gap:4px; opacity:0; transition:opacity .2s; z-index:4; }
 .tela:hover .reacoes { opacity:1; }
 .reacoes button { padding:4px 6px; font-size:17px; line-height:1; background:rgba(var(--fundoRGB),.8); border:1px solid rgba(255,255,255,.12); border-radius:8px; }
 .reacoes button:hover { transform:scale(1.15); background:rgba(var(--accRGB),.25); }
@@ -287,7 +287,7 @@ button.mudo { background:var(--panel2); border:1px solid rgba(255,77,94,.6); col
 #vazio .grande { font-size:40px; margin-bottom:6px; }
 .tela { position:relative; background:#000; border-radius:var(--raio); overflow:hidden; border:1px solid var(--linha); }
 .tela video { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; }
-.tela .ctrl { position:absolute; left:0; right:0; bottom:0; display:flex; gap:8px; align-items:center; padding:10px;
+.tela .ctrl { position:absolute; left:0; right:0; bottom:var(--imgY,0px); display:flex; gap:8px; align-items:center; padding:10px;
               background:linear-gradient(transparent, rgba(0,0,0,.8)); opacity:0; transition:opacity .2s; }
 .tela:hover .ctrl { opacity:1; }
 .tela .ctrl .n { flex:1; font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-shadow:0 1px 3px #000; }
@@ -295,7 +295,7 @@ button.mudo { background:var(--panel2); border:1px solid rgba(255,77,94,.6); col
 .tela .ctrl input[type=range] { width:90px; accent-color:var(--acc); }
 .tela .aviso { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; text-align:center; padding:16px; color:var(--mut); font-size:14px; }
 .tela .aviso.clicavel { cursor:pointer; color:var(--txt); background:rgba(0,0,0,.5); }
-.tela .selo { position:absolute; top:10px; left:10px; font-size:11px; font-weight:700; background:var(--live); color:#fff; border-radius:5px; padding:3px 7px; }
+.tela .selo { position:absolute; top:calc(var(--imgY,0px) + 10px); left:calc(var(--imgX,0px) + 10px); font-size:11px; font-weight:700; background:var(--live); color:#fff; border-radius:5px; padding:3px 7px; }
 
 body.limpo #barra, body.limpo #membros, body.limpo .tela .ctrl, body.limpo .tela .selo { display:none; }
 body.limpo #grade { padding:0; gap:2px; }

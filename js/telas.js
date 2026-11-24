@@ -33,6 +33,7 @@ function criarTela(id, titulo, local) {
     t.appendChild(bar);
   }
   const v = t.querySelector('video');
+  acompanharImagem(t, v);
   const r = t.querySelector('input[type=range]');
   t._chave = titulo;
   if (r) {
@@ -55,6 +56,26 @@ function criarTela(id, titulo, local) {
   if (local) $('grade').prepend(t); else $('grade').appendChild(t);
   atualizarVazio(); atualizarFoco();
   return t;
+}
+// ---- onde a imagem fica dentro da tela (sem as faixas pretas) ----
+// Em monitor vertical a tela é alta e o vídeo 16:9 fica no meio; os avisos por cima
+// (selo, quem está falando, reações, botões) acompanham a imagem, não a caixa.
+const obsImagem = new ResizeObserver(itens => { for (const it of itens) medirImagem(it.target); });
+function medirImagem(t) {
+  const v = t.querySelector('video'); if (!v) return;
+  const w = t.clientWidth, h = t.clientHeight;
+  const vw = v.videoWidth, vh = v.videoHeight;
+  let x = 0, y = 0;
+  if (vw && vh && w && h) {
+    const k = Math.min(w / vw, h / vh);
+    x = Math.max(0, Math.floor((w - vw * k) / 2)); y = Math.max(0, Math.floor((h - vh * k) / 2));
+  }
+  t.style.setProperty('--imgX', x + 'px'); t.style.setProperty('--imgY', y + 'px');
+}
+function acompanharImagem(t, v) {
+  v.addEventListener('loadedmetadata', () => medirImagem(t));
+  v.addEventListener('resize', () => medirImagem(t));   // a pessoa trocou a resolução da captura
+  obsImagem.observe(t);
 }
 // ---- som de cada transmissão: passa por um ganho para poder ir até 200% ----
 let ctxTelas = null;
