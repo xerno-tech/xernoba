@@ -34,6 +34,11 @@ function mostrarConectando(texto, aviso) {
   const el = $('lista'); if (!el || euId || membros.length) return;
   el.innerHTML = `<div class="conectando${aviso ? ' aviso' : ''}">${texto}</div>`;
 }
+// depois de ligar ao servidor, enquanto a lista da sala não chega
+function mostrarEntrando(texto, aviso) {
+  const el = $('lista'); if (!el || membros.length) return;
+  el.innerHTML = `<div class="conectando${aviso ? ' aviso' : ''}">${texto}</div>`;
+}
 async function iniciarConexao() {
   await prepararTurn();
   tentativaServidor++; inicioTentativa = Date.now();
@@ -53,7 +58,7 @@ async function iniciarConexao() {
   peer.on('open', id => {
     if (peer !== estePeer) { try { estePeer.destroy(); } catch (e) {} return; }
     clearTimeout(tServidor);
-    mostrarConectando('Entrando na sala…');
+    mostrarEntrando('Entrando na sala…');
     const seg = ((Date.now() - inicioTentativa) / 1000).toFixed(1);
     anotarConexao(`🟢 Ligado ao servidor da Midori em ${seg} s` + (tentativaServidor > 1 ? ` (tentativa ${tentativaServidor})` : ''));
     euId = id; virarHub(); setTimeout(() => { if (!hubConn) conectarHub(); }, 800);

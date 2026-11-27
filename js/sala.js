@@ -44,6 +44,7 @@ const assistindo = new Map();    // quem eu assisto: id -> {conn, call, tela}
 function virarHub() {
   if (hubPeer || bloqueado || saindo) return;
   hubPeer = new Peer(HUB, OPCOES_PEER);
+  { const hp = hubPeer; ouvirPonte(hp, c => { if (hubPeer === hp) hp.emit('connection', c); }); }   // quem não consegue ligação direta comigo entra pela ponte
   const roster = new Map(), conns = new Map();
   const historico = [];
   const miniaturas = new Map();   // quem está ao vivo -> última miniatura
@@ -339,11 +340,24 @@ function conectarHub() {
   if (hubConn && hubConn.open) return;   // já está ligado: não derruba uma ligação que funciona
   if (hubConn && Date.now() - hubConn._desde < 8000) return;   // ainda está tentando ligar: espera
   if (hubConn) { const velha = hubConn; hubConn = null; try { velha.close(); } catch (e) {} }
-  const conn = hubConn = peer.connect(HUB, { reliable: true });
+  // a ligação direta não abriu: alterna com a ponte pelo servidor (e fica nela se funcionar)
+  const pelaPonte = ponteFuncionou || falhasHub % 2 === 1;
+  const conn = hubConn = pelaPonte ? abrirPonte(peer, HUB) : peer.connect(HUB, { reliable: true });
   conn._desde = Date.now();
+  if (falhasHub) mostrarEntrando(falhasHub >= 4
+    ? '⚠️ Não estou conseguindo falar com quem organiza a sala. A Midori continua tentando; se demorar, peça para quem já está na sala atualizar a página (Ctrl+F5).'
+    : `Entrando na sala… (tentativa ${falhasHub + 1}${pelaPonte ? ', pelo servidor' : ''})`, falhasHub >= 4);
   // se ficar travada tentando ligar, desiste dela e tenta de novo
-  setTimeout(() => { if (hubConn === conn && !conn.open) { hubConn = null; try { conn.close(); } catch (e) {} agendarHub(); } }, 10000);
+  setTimeout(() => {
+    if (hubConn === conn && !conn.open) {
+      falhasHub++;
+      anotarConexao(pelaPonte ? '⏳ O organizador da sala não respondeu pela ponte do servidor em 10 s' : '⏳ A ligação direta com o organizador da sala não abriu em 10 s (a rede pode estar bloqueando)');
+      hubConn = null; try { conn.close(); } catch (e) {} agendarHub();
+    }
+  }, 10000);
   conn.on('open', () => {
+    if (pelaPonte && !ponteFuncionou) { ponteFuncionou = true; anotarConexao('🌉 Entrou na sala pela ponte do servidor (a ligação direta com o organizador não abriu)'); }
+    falhasHub = 0;
     const pc = conn.peerConnection;   // guarda o último estado da ligação, para o registro de quedas
     if (pc) pc.addEventListener('iceconnectionstatechange', () => { conn._ice = pc.iceConnectionState; });
     if (caiuDoHub) { caiuDoHub = false; anotarConexao('✅ Voltou a ligação com o organizador da sala'); } enviarEstado(); });
@@ -355,6 +369,7 @@ function conectarHub() {
     hubConn = null; if (!bloqueado) agendarHub();
   });
   conn.on('data', d => {
+    conn._ultimo = Date.now();
     if (!d) return;
     if (d.tipo === 'lista') { for (const m of d.membros) if (m.live) m._inicioLocal = Date.now() - (m.liveMs || 0); membros = d.membros; if (d.regras) regrasSala = d.regras; renderLista(); atualizarAdminUI(); atualizarEspectadores(); }
     else if (d.tipo === 'thumb') { miniaturasRec.set(d.id, d.img); if (previaDe === d.id) $('previaHover').querySelector('img').src = d.img; const li = document.querySelector(`#vazio [data-mini="${CSS.escape(d.id)}"]`); if (li) li.src = d.img; }
@@ -378,7 +393,17 @@ function conectarHub() {
     else if (d.tipo === 'historico') (d.msgs || []).forEach(x => addMsg(x, true));
   });
 }
-let caiuDoHub = false;
+let caiuDoHub = false, falhasHub = 0, ponteFuncionou = false;
+// o organizador manda a lista pelo menos a cada 5 s. Se parar de chegar (o PC dele dormiu, a internet caiu
+// sem fechar a aba), a ligação está morta mesmo parecendo aberta: larga e procura o organizador de novo
+setInterval(() => {
+  const c = hubConn;
+  if (!c || !c.open || document.hidden || bloqueado || saindo) return;
+  if (Date.now() - (c._ultimo || c._desde) < 40000) return;
+  anotarConexao('🔇 O organizador da sala parou de responder há 40 s; procurando de novo');
+  try { c.close(); } catch (e) {}
+  if (hubConn === c) { hubConn = null; caiuDoHub = true; agendarHub(); }
+}, 5000);
 function agendarHub() {
   clearTimeout(tHub);
   tHub = setTimeout(() => { if (bloqueado || saindo) return; if (!hubConn || !hubConn.open) virarHub(); if (hubPeer && hubPeer.open) conectarHub(); }, 500 + Math.random() * 2000);
